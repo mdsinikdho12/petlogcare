@@ -1,0 +1,463 @@
+// src/app/admin/providers/page.tsx
+"use client";
+
+import React, { useState } from "react";
+import {
+  ShieldCheck,
+  ShieldAlert,
+  Search,
+  Filter,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  FileText,
+  Building2,
+  MapPin,
+  ExternalLink,
+  Phone,
+  Clock,
+  Sparkles,
+  AlertTriangle,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import StatusBadge from "@/components/dashboard/StatusBadge";
+
+interface ProviderVerification {
+  id: string;
+  clinicName: string;
+  leadDoctor: string;
+  licenseNumber: string;
+  degreeCredentials: string;
+  district: string;
+  address: string;
+  phone: string;
+  submittedAt: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  documents: { title: string; type: string; size: string }[];
+  notes?: string;
+}
+
+const mockVerifications: ProviderVerification[] = [
+  {
+    id: "pv-1",
+    clinicName: "Bengal Pet Care & Diagnostics",
+    leadDoctor: "Dr. Farhana Yasmin (DVM, MS)",
+    licenseNumber: "TR-DHAKA-2026-8812",
+    degreeCredentials: "BAU Mymensingh • 8 yrs practice",
+    district: "Banani, Dhaka",
+    address: "Road 11, Block D, House 42",
+    phone: "+880 1712-445566",
+    submittedAt: "Today, 10:30 AM",
+    status: "PENDING",
+    documents: [
+      { title: "Trade_License_2026.pdf", type: "PDF Document", size: "2.4 MB" },
+      { title: "BVCA_Registration_Certificate.pdf", type: "PDF Document", size: "1.1 MB" },
+      { title: "Clinic_Premises_Photo.jpg", type: "Image", size: "3.8 MB" },
+    ],
+  },
+  {
+    id: "pv-2",
+    clinicName: "Green Vet Medical Hub",
+    leadDoctor: "Dr. Mahfuzur Rahman (DVM)",
+    licenseNumber: "TR-CTG-2025-4190",
+    degreeCredentials: "CVASU Chittagong • 5 yrs practice",
+    district: "Nasirabad, Chittagong",
+    address: "CDA Avenue, Building 18",
+    phone: "+880 1819-223344",
+    submittedAt: "Yesterday, 04:15 PM",
+    status: "PENDING",
+    documents: [
+      { title: "City_Corporation_Trade_License.pdf", type: "PDF Document", size: "1.8 MB" },
+      { title: "Doctor_Veterinary_License.pdf", type: "PDF Document", size: "950 KB" },
+    ],
+  },
+  {
+    id: "pv-3",
+    clinicName: "CareVet Animal Hospital & Surgery",
+    leadDoctor: "Dr. Samira Khan (DVM, PGD)",
+    licenseNumber: "TR-DHAKA-2024-1102",
+    degreeCredentials: "BAU Mymensingh • 12 yrs practice",
+    district: "Dhanmondi, Dhaka",
+    address: "House 42, Road 9/A",
+    phone: "+880 1812-987654",
+    submittedAt: "28 Sep 2026",
+    status: "APPROVED",
+    documents: [
+      { title: "Trade_License_Verified.pdf", type: "PDF Document", size: "2.1 MB" },
+      { title: "Surgical_Suite_Certification.pdf", type: "PDF Document", size: "1.5 MB" },
+    ],
+  },
+  {
+    id: "pv-4",
+    clinicName: "Mirpur Quick Groomers",
+    leadDoctor: "Kabir Hossain (Technician)",
+    licenseNumber: "PENDING-0012",
+    degreeCredentials: "Grooming Certificate Only",
+    district: "Mirpur, Dhaka",
+    address: "Sector 10, Mirpur",
+    phone: "+880 1611-009988",
+    submittedAt: "02 Nov 2026",
+    status: "REJECTED",
+    notes: "Requires licensed DVM attending veterinarian to qualify as clinical practice.",
+    documents: [
+      { title: "Trade_License_Mirpur.pdf", type: "PDF Document", size: "1.2 MB" },
+    ],
+  },
+];
+
+export default function AdminProvidersPage() {
+  const [verifications, setVerifications] = useState<ProviderVerification[]>(mockVerifications);
+  const [statusFilter, setStatusFilter] = useState<string>("PENDING");
+  const [search, setSearch] = useState("");
+
+  // Inspect Modal
+  const [inspecting, setInspecting] = useState<ProviderVerification | null>(null);
+
+  // Reject Modal
+  const [rejecting, setRejecting] = useState<ProviderVerification | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const filtered = verifications.filter((v) => {
+    const matchesStatus = statusFilter === "ALL" || v.status === statusFilter;
+    const matchesSearch =
+      v.clinicName.toLowerCase().includes(search.toLowerCase()) ||
+      v.leadDoctor.toLowerCase().includes(search.toLowerCase()) ||
+      v.licenseNumber.toLowerCase().includes(search.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
+
+  const handleApprove = (pv: ProviderVerification) => {
+    setVerifications((prev) =>
+      prev.map((item) =>
+        item.id === pv.id ? { ...item, status: "APPROVED" } : item
+      )
+    );
+    toast.success(`${pv.clinicName} has been approved as a Verified Practice!`);
+    if (inspecting?.id === pv.id) setInspecting(null);
+  };
+
+  const handleOpenReject = (pv: ProviderVerification) => {
+    setRejecting(pv);
+    setRejectReason("");
+  };
+
+  const confirmReject = () => {
+    if (!rejecting) return;
+    if (!rejectReason.trim()) {
+      toast.error("Please state the inadequate documentation or rejection reason");
+      return;
+    }
+    setVerifications((prev) =>
+      prev.map((item) =>
+        item.id === rejecting.id
+          ? { ...item, status: "REJECTED", notes: rejectReason }
+          : item
+      )
+    );
+    toast.success(`Verification for ${rejecting.clinicName} has been rejected`);
+    setRejecting(null);
+    if (inspecting?.id === rejecting.id) setInspecting(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl sm:text-[28px] font-bold tracking-tight text-[#06395F]">
+            Practice verification queue
+          </h1>
+          <p className="text-[13px] text-[#06395F]/75 mt-0.5 font-normal">
+            Verify veterinary degrees, government trade licenses, and clinic premises in Bangladesh.
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[11px] bg-amber-50 border border-amber-200 text-xs text-amber-800 font-semibold">
+          <Clock className="w-4 h-4 text-amber-600" />
+          <span>
+            {verifications.filter((v) => v.status === "PENDING").length} pending reviews
+          </span>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-4 shadow-[0_1px_2px_rgba(6,57,95,0.06)] flex flex-col md:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#06395F]/50" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search clinic or doctor..."
+            className="w-full h-10 pl-10 pr-3.5 rounded-[11px] border border-[#06395F]/15 bg-white text-xs text-[#06395F] placeholder:text-[#06395F]/40 focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 p-1 rounded-[11px] bg-slate-100 border border-slate-200 text-xs font-semibold text-[#06395F]">
+          {["PENDING", "APPROVED", "REJECTED", "ALL"].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded-[9px] transition ${
+                statusFilter === s
+                  ? "bg-white text-[#0D8BE0] shadow-xs"
+                  : "text-[#06395F]/70 hover:text-[#06395F]"
+              }`}
+            >
+              {s === "PENDING"
+                ? "Pending reviews"
+                : s === "APPROVED"
+                ? "Verified practices"
+                : s === "REJECTED"
+                ? "Rejected"
+                : "All"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Verification Cards Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {filtered.map((pv) => (
+          <div
+            key={pv.id}
+            className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4 hover:border-[#0D8BE0]/30 transition"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-[11px] bg-sky-500/15 border border-sky-300/40 flex items-center justify-center text-[#0D8BE0] shrink-0 mt-0.5">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#06395F]">
+                    {pv.clinicName}
+                  </h3>
+                  <p className="text-xs text-[#06395F]/80 font-medium">
+                    {pv.leadDoctor}
+                  </p>
+                  <p className="text-[11px] text-[#06395F]/60">
+                    License: <span className="font-mono">{pv.licenseNumber}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                {pv.status === "PENDING" ? (
+                  <StatusBadge status="PENDING" label="Pending verification" />
+                ) : pv.status === "APPROVED" ? (
+                  <StatusBadge status="APPROVED" label="Verified practice" />
+                ) : (
+                  <StatusBadge status="CANCELLED" label="Rejected" />
+                )}
+              </div>
+            </div>
+
+            {/* Address & Credentials */}
+            <div className="p-3 rounded-[11px] bg-slate-50 border border-slate-200/60 space-y-1.5 text-xs text-[#06395F]">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
+                <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                <span>{pv.district} • {pv.address}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{pv.degreeCredentials}</span>
+              </div>
+            </div>
+
+            {/* Uploaded Documents List */}
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold text-[#06395F]/70">
+                Uploaded credentials ({pv.documents.length} files)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {pv.documents.map((doc, idx) => (
+                  <div
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-white border border-[#06395F]/15 text-[11px] text-[#06395F]"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#0D8BE0]" />
+                    <span className="font-medium">{doc.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {pv.notes && (
+              <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-[8px] border border-rose-200">
+                Reason: {pv.notes}
+              </p>
+            )}
+
+            {/* Action Bar */}
+            <div className="pt-2 border-t border-[#06395F]/10 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setInspecting(pv)}
+                className="px-3 py-1.5 rounded-[9px] border border-[#06395F]/15 bg-white text-[#06395F] text-xs font-semibold hover:bg-slate-50 transition shadow-2xs inline-flex items-center gap-1"
+              >
+                <Eye className="w-3.5 h-3.5 text-[#0D8BE0]" />
+                <span>Inspect dossier</span>
+              </button>
+
+              {pv.status === "PENDING" && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReject(pv)}
+                    className="px-3 py-1.5 rounded-[9px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition shadow-2xs"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApprove(pv)}
+                    className="px-3.5 py-1.5 rounded-[9px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition"
+                  >
+                    Approve practice
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Dossier Inspection Modal */}
+      {inspecting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xl rounded-[13px] border border-white/80 bg-white/95 p-6 shadow-2xl backdrop-blur-xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#06395F]/10">
+              <div>
+                <h2 className="font-bold text-lg text-[#06395F]">{inspecting.clinicName}</h2>
+                <p className="text-xs text-[#06395F]/70">Submitted {inspecting.submittedAt}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspecting(null)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-[#06395F]">
+              <div className="p-3 rounded-[11px] bg-slate-50 border border-slate-200/60 space-y-1.5">
+                <p>Lead Veterinarian: <strong>{inspecting.leadDoctor}</strong></p>
+                <p>Degree & Credentials: <strong>{inspecting.degreeCredentials}</strong></p>
+                <p>Trade License: <strong>{inspecting.licenseNumber}</strong></p>
+                <p>Direct Phone: <strong>{inspecting.phone}</strong></p>
+                <p>Clinic Address: <strong>{inspecting.address}, {inspecting.district}</strong></p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-xs text-[#06395F] mb-2">
+                  Uploaded Documents & Certifications (Cloudinary 5-min signed links)
+                </h3>
+                <div className="space-y-2">
+                  {inspecting.documents.map((doc, i) => (
+                    <div
+                      key={i}
+                      className="p-3 rounded-[11px] border border-[#06395F]/15 bg-white flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-[#0D8BE0]" />
+                        <div>
+                          <p className="font-semibold text-xs text-[#06395F]">{doc.title}</p>
+                          <p className="text-[10px] text-[#06395F]/60">{doc.type} • {doc.size}</p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-semibold text-[#0D8BE0] hover:underline cursor-pointer inline-flex items-center gap-1">
+                        <span>View file</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between border-t border-[#06395F]/10">
+              <button
+                type="button"
+                onClick={() => setInspecting(null)}
+                className="px-4 py-2 rounded-[11px] bg-slate-100 text-[#06395F] text-xs font-semibold hover:bg-slate-200 transition"
+              >
+                Close
+              </button>
+
+              {inspecting.status === "PENDING" && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReject(inspecting)}
+                    className="px-4 py-2 rounded-[11px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApprove(inspecting)}
+                    className="px-4 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition"
+                  >
+                    Approve practice
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejecting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-[13px] border border-white/80 bg-white/95 p-6 shadow-2xl backdrop-blur-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[11px] bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[#06395F]">
+                  Reject practice verification
+                </h3>
+                <p className="text-xs text-[#06395F]/70">{rejecting.clinicName}</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#06395F]">
+                Reason for rejection (sent to clinic email)
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Unreadable trade license, BVCA registration expired, or surgical premises certification missing..."
+                rows={3}
+                className="w-full p-2.5 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejecting(null)}
+                className="px-4 py-2 rounded-[11px] border border-[#06395F]/15 bg-white text-xs font-semibold text-[#06395F]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReject}
+                className="px-4 py-2 rounded-[11px] bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+              >
+                Confirm rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

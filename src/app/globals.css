@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────────── */
+@theme inline {
+  /* ── Fonts ───────────────────────────────────────────────── */
+  /* Display / Headline font: Agrave Pro with Plus Jakarta Sans and Noto Sans Bengali fallback */
+  --font-display: "Agrave Pro", "Plus Jakarta Sans", "Noto Sans Bengali", system-ui, sans-serif;
+  /* Clean, balanced body & UI font: Plus Jakarta Sans */
+  --font-sans:    "Plus Jakarta Sans", "Noto Sans Bengali", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Script accent font: Caveat */
+  --font-script:  "Caveat", cursive, sans-serif;
+  --font-mono:    var(--font-geist-mono), monospace;
+
+  /* ── Brand — vibrant medical sky blue ────────────────────── */
+  --color-brand-50:  #eff8ff;
+  --color-brand-100: #dbeffe;
+  --color-brand-200: #b9e1fd;
+  --color-brand-300: #7ccbfb;
+  --color-brand-400: #37aef5;
+  --color-brand-500: #0d96e6;
+  --color-brand-600: #0178c5;
+  --color-brand-700: #015fa0;
+  --color-brand-800: #064f83;
+  --color-brand-900: #0b426d;
+
+  /* ── Accent ──────────────────────────────────────────────── */
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+
+  /* ── Coral ───────────────────────────────────────────────── */
+  --color-coral-400: #fb7185;
+  --color-coral-500: #f43f5e;
+
+  /* ── Surface ─────────────────────────────────────────────── */
+  --color-surface-0:   #ffffff;
+  --color-surface-50:  #f7fbff;
+  --color-surface-100: #eef5fc;
+  --color-surface-200: #dce9f5;
+  --color-surface-300: #bdd3e8;
+  --color-surface-800: #1e3148;
+  --color-surface-900: #0f1f30;
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --color-text-primary:   #0f1f30;
+  --color-text-secondary: #4a6b87;
+  --color-text-muted:     #7a9ab5;
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-card:  0 2px 16px -4px rgba(13,150,230,0.08), 0 1px 4px -1px rgba(15,34,56,0.04);
+  --shadow-hover: 0 12px 32px -8px rgba(13,150,230,0.18), 0 4px 8px -2px rgba(15,34,56,0.06);
+  --shadow-glass: 0 8px 32px -4px rgba(13,150,230,0.12);
+  --shadow-sky:   0 20px 50px -10px rgba(13,150,230,0.25);
+}
+
+/* ─── Base ───────────────────────────────────────────────────── */
+:root {
+  --background: #f7fbff;
+  --foreground: #0f1f30;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: auto; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ─── Font utility classes ───────────────────────────────────── */
+.font-display { font-family: "Agrave Pro", "Plus Jakarta Sans", "Noto Sans Bengali", system-ui, sans-serif; }
+.font-sans    { font-family: "Plus Jakarta Sans", "Noto Sans Bengali", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.font-script  { font-family: "Caveat", cursive, sans-serif; }
+
+/* ─── Keyframe animations ────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50%       { transform: translateY(-10px) rotate(1deg); }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.05); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8) rotate(0deg); }
+  50%       { opacity: 1; transform: scale(1.2) rotate(15deg); }
+}
+
+@keyframes peek-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0px); opacity: 1; }
+}
+
+/* ─── Animation classes ──────────────────────────────────────── */
+.animate-fade-up      { animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in      { animation: fade-in 0.5s ease both; }
+.animate-slide-left   { animation: slide-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-float        { animation: float 5s ease-in-out infinite; }
+.animate-float-gentle { animation: float-gentle 4s ease-in-out infinite; }
+.animate-pulse-soft   { animation: pulse-soft 3s ease-in-out infinite; }
+.animate-sparkle      { animation: sparkle 3s ease-in-out infinite; }
+.animate-peek-up      { animation: peek-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Stagger delays */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+/* ─── Glass surface ──────────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(13, 150, 230, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-slide-left,
+  .animate-float,
+  .animate-float-gentle,
+  .animate-pulse-soft,
+  .animate-sparkle,
+  .animate-peek-up {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ─── Focus & Selection ──────────────────────────────────────── */
+::selection { background: #0d96e6; color: #fff; }
+:focus-visible {
+  outline: 2px solid #0d96e6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
