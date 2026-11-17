@@ -1,7 +1,7 @@
-// src/app/dashboard/provider/profile/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Building2,
   MapPin,
@@ -16,142 +16,342 @@ import {
   Save,
   CheckCircle2,
   Trash2,
+  Loader2,
+  Users,
+  ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "@/lib/api/client";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 
-interface Doctor {
-  id: string;
+/* ---------- Liquid Glass Tokens (Design System v2) ---------- */
+const glass =
+  "rounded-[13px] border border-white/80 bg-white/55 backdrop-blur-xl backdrop-saturate-150 " +
+  "shadow-[0_8px_30px_rgba(1,95,160,0.10),inset_0_1px_0_rgba(255,255,255,0.95)]";
+
+const primaryBtn =
+  "inline-flex h-10 items-center justify-center gap-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] " +
+  "px-5 text-xs font-semibold text-white shadow-[0_4px_14px_rgba(13,150,230,0.30)] " +
+  "transition duration-200 hover:-translate-y-0.5 active:translate-y-0 disabled:pointer-events-none disabled:opacity-60";
+
+const inputCls =
+  "h-10 w-full rounded-[11px] border border-[#06395F]/20 bg-white px-3.5 text-xs text-[#06395F] " +
+  "shadow-2xs outline-none transition placeholder:text-[#06395F]/35 " +
+  "focus:bg-white focus:ring-2 focus:ring-[#0D8BE0]";
+
+interface StaffMember {
+  id?: string;
+  _id?: string;
   name: string;
-  credentials: string;
-  specialty: string;
+  role: string;
+  phone?: string;
+  title?: string;
+  bio?: string;
 }
 
 export default function ProviderProfilePage() {
-  const [clinicName, setClinicName] = useState("CareVet Animal Hospital & Surgery");
-  const [licenseNumber, setLicenseNumber] = useState("TR-DHAKA-2024-1102");
-  const [phone, setPhone] = useState("+880 1700-123456");
-  const [email, setEmail] = useState("contact@carevet.bd");
-  const [district, setDistrict] = useState("Dhanmondi, Dhaka");
-  const [address, setAddress] = useState("House 42, Road 9/A, Dhanmondi");
-  const [emergencyHotline, setEmergencyHotline] = useState("+880 1700-000000");
-  const [aboutClinic, setAboutClinic] = useState(
-    "State-of-the-art veterinary clinic specialized in companion animal diagnostics, orthopedic surgery, preventive medicine, and 24/7 trauma triage in Dhanmondi."
-  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
-  const [facilities, setFacilities] = useState([
-    { id: "f-1", name: "24/7 Emergency Trauma", enabled: true },
-    { id: "f-2", name: "Digital X-Ray Suite", enabled: true },
-    { id: "f-3", name: "In-House Blood Diagnostics", enabled: true },
-    { id: "f-4", name: "Sterile Surgical Theater", enabled: true },
-    { id: "f-5", name: "Oxygen Therapy & ICU Incubators", enabled: true },
-    { id: "f-6", name: "Medicated Pet Grooming & Spa", enabled: false },
-  ]);
+  // Business profile state
+  const [businessName, setBusinessName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [description, setDescription] = useState("");
+  const [line1, setLine1] = useState("");
+  const [area, setArea] = useState("");
+  const [city, setCity] = useState("Dhaka");
+  const [district, setDistrict] = useState("Dhaka");
+  const [inClinic, setInClinic] = useState(true);
+  const [homeVisit, setHomeVisit] = useState(false);
+  const [autoAcceptBookings, setAutoAcceptBookings] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<string>("APPROVED");
+  const [providerTypes, setProviderTypes] = useState<string[]>(["VET_CLINIC"]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
-  const [doctors, setDoctors] = useState<Doctor[]>([
-    {
-      id: "doc-1",
-      name: "Dr. Samira Khan",
-      credentials: "DVM (BAU), MS (Small Animal Surgery)",
-      specialty: "Chief Veterinary Surgeon",
-    },
-    {
-      id: "doc-2",
-      name: "Dr. Tanvir Ahmed",
-      credentials: "DVM, PGD (Feline Medicine)",
-      specialty: "Companion Animal Practitioner",
-    },
-  ]);
+  // Staff members from real API
+  const [staff, setStaff] = useState<StaffMember[]>([]);
 
-  const [newDocName, setNewDocName] = useState("");
-  const [newDocCredentials, setNewDocCredentials] = useState("");
-  const [newDocSpecialty, setNewDocSpecialty] = useState("");
-  const [showAddDoc, setShowAddDoc] = useState(false);
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        setLoading(true);
+        const [pRes, sRes] = await Promise.allSettled([
+          apiClient.get("/providers/me"),
+          apiClient.get("/providers/me/staff"),
+        ]);
 
-  const handleToggleFacility = (id: string) => {
-    setFacilities((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f))
+        if (pRes.status === "fulfilled" && pRes.value.data?.data) {
+          const p = pRes.value.data.data;
+          setBusinessName(p.businessName || "");
+          setContactPhone(p.contactPhone || p.phone || "");
+          setContactEmail(p.contactEmail || p.email || "");
+          setDescription(p.description || p.bio || "");
+          if (p.address) {
+            setLine1(p.address.line1 || p.address.street || "");
+            setArea(p.address.area || "");
+            setCity(p.address.city || "Dhaka");
+            setDistrict(p.address.district || "Dhaka");
+          }
+          if (p.serviceModes) {
+            setInClinic(p.serviceModes.inClinic ?? true);
+            setHomeVisit(p.serviceModes.homeVisit ?? false);
+          }
+          setAutoAcceptBookings(Boolean(p.autoAcceptBookings));
+          setVerificationStatus(p.verificationStatus || p.status || "APPROVED");
+          if (Array.isArray(p.providerTypes) && p.providerTypes.length > 0) {
+            setProviderTypes(p.providerTypes);
+          }
+          if (p.logoUrl || p.logo) setLogoUrl(p.logoUrl || p.logo);
+          if (p.coverUrl || p.cover) setCoverUrl(p.coverUrl || p.cover);
+        }
+
+        if (sRes.status === "fulfilled" && sRes.value.data?.data) {
+          const items = Array.isArray(sRes.value.data.data)
+            ? sRes.value.data.data
+            : sRes.value.data.data.staff || [];
+          setStaff(items);
+        }
+      } catch {
+        // Fallback gracefully
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProfile();
+  }, []);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessName) {
+      toast.error("Business name is required");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const payload = {
+        businessName,
+        contactPhone,
+        contactEmail,
+        description,
+        address: {
+          line1,
+          area,
+          city,
+          district,
+        },
+        serviceModes: {
+          inClinic,
+          homeVisit,
+        },
+        autoAcceptBookings,
+        providerTypes,
+      };
+
+      await apiClient.patch("/providers/me", payload);
+      toast.success("Practice profile updated in live database!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingLogo(true);
+      const formData = new FormData();
+      formData.append("logo", file);
+
+      const res = await apiClient.patch("/providers/me/logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const updatedUrl = res.data?.data?.logoUrl || res.data?.data?.logo || URL.createObjectURL(file);
+      setLogoUrl(updatedUrl);
+      toast.success("Clinic logo updated!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to upload logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingCover(true);
+      const formData = new FormData();
+      formData.append("cover", file);
+
+      const res = await apiClient.patch("/providers/me/cover", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const updatedUrl = res.data?.data?.coverUrl || res.data?.data?.cover || URL.createObjectURL(file);
+      setCoverUrl(updatedUrl);
+      toast.success("Cover photo updated!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to upload cover photo");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const toggleType = (t: string) => {
+    setProviderTypes((prev) =>
+      prev.includes(t)
+        ? prev.length > 1
+          ? prev.filter((item) => item !== t)
+          : prev
+        : [...prev, t]
     );
   };
 
-  const handleAddDoctor = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDocName.trim() || !newDocCredentials.trim()) {
-      toast.error("Please enter doctor's name and credentials");
-      return;
-    }
-    const newDoc: Doctor = {
-      id: `doc-${Date.now()}`,
-      name: newDocName,
-      credentials: newDocCredentials,
-      specialty: newDocSpecialty || "Attending Veterinarian",
-    };
-    setDoctors([...doctors, newDoc]);
-    setNewDocName("");
-    setNewDocCredentials("");
-    setNewDocSpecialty("");
-    setShowAddDoc(false);
-    toast.success("Veterinarian added to practice profile");
-  };
-
-  const handleRemoveDoctor = (id: string) => {
-    setDoctors((prev) => prev.filter((d) => d.id !== id));
-    toast.success("Doctor removed from directory");
-  };
-
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success("Practice profile updated successfully!");
-  };
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-[#06395F]/60">
+        <Loader2 className="w-8 h-8 animate-spin text-[#0D8BE0] mb-3" />
+        <p className="text-xs font-semibold">Loading practice profile from database...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl sm:text-[28px] font-bold tracking-tight text-[#06395F]">
-            Practice & clinic profile
+            Practice & Clinic Profile
           </h1>
-          <p className="text-[13px] text-[#06395F]/75 mt-0.5 font-normal">
-            Manage your public veterinary practice listing, licensed doctors, and clinic amenities.
+          <p className="text-[13px] text-[#06395F]/75 mt-0.5">
+            Manage your public veterinary practice listing, contact details, and location.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <StatusBadge variant="success" text="Verified Practice" />
+          <StatusBadge
+            status={verificationStatus as any}
+            label={verificationStatus === "APPROVED" ? "Verified Practice" : verificationStatus}
+          />
         </div>
       </div>
 
       <form onSubmit={handleSaveProfile} className="space-y-6">
-        {/* Basic Information Card */}
-        <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 sm:p-6 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4">
+        {/* Cover & Logo Section */}
+        <div className={`${glass} overflow-hidden p-0 relative`}>
+          {/* Cover Banner */}
+          <div className="h-36 sm:h-44 w-full bg-gradient-to-r from-sky-400/30 via-blue-500/20 to-sky-600/30 relative flex items-center justify-center overflow-hidden">
+            {coverUrl ? (
+              <img
+                src={coverUrl}
+                alt="Clinic Cover"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="text-xs text-[#06395F]/50 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#0D8BE0]" />
+                <span>Upload a banner to showcase your clinic exterior</span>
+              </div>
+            )}
+
+            <label className="absolute right-4 bottom-4 px-3 py-1.5 rounded-[11px] bg-white/90 hover:bg-white text-xs font-semibold text-[#06395F] shadow-sm flex items-center gap-1.5 cursor-pointer transition">
+              <Camera className="w-3.5 h-3.5 text-[#0D8BE0]" />
+              <span>{uploadingCover ? "Uploading..." : "Change Cover"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingCover}
+                onChange={handleCoverUpload}
+              />
+            </label>
+          </div>
+
+          {/* Logo & Meta info */}
+          <div className="p-6 pt-0 flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-10 sm:-mt-12 relative z-10">
+            <div className="flex items-end gap-4">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-white bg-white shadow-md relative overflow-hidden flex items-center justify-center text-center">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={businessName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Building2 className="w-8 h-8 text-[#0D8BE0]" />
+                )}
+
+                <label className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center opacity-0 hover:opacity-100 transition cursor-pointer">
+                  <Camera className="w-4 h-4 mb-0.5" />
+                  <span className="text-[9px] font-bold">Edit</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingLogo}
+                    onChange={handleLogoUpload}
+                  />
+                </label>
+              </div>
+
+              <div className="mb-1">
+                <h2 className="font-display text-lg sm:text-xl font-bold text-[#06395F]">
+                  {businessName || "Your Veterinary Practice"}
+                </h2>
+                <p className="text-xs text-[#0B4C7A]/70 flex items-center gap-1 mt-0.5">
+                  <MapPin className="w-3.5 h-3.5 text-[#0D8BE0]" />
+                  <span>{[area, city].filter(Boolean).join(", ") || "Location unconfigured"}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Basic Business Information Card */}
+        <div className={`${glass} p-5 sm:p-6 space-y-4`}>
           <h2 className="text-base font-bold text-[#06395F] flex items-center gap-2">
             <Building2 className="w-4 h-4 text-[#0D8BE0]" />
-            <span>Practice Identity & Government Registration</span>
+            <span>Practice Identity & Registration</span>
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#06395F]">
-                Clinic / Hospital Name
+                Clinic / Hospital Name *
               </label>
               <input
                 type="text"
-                value={clinicName}
-                onChange={(e) => setClinicName(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="e.g. CareVet Animal Hospital"
+                className={inputCls}
+                required
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#06395F]">
-                Government Trade License No.
+                Contact Email
               </label>
               <input
-                type="text"
-                value={licenseNumber}
-                onChange={(e) => setLicenseNumber(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] font-mono focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="info@clinic.com"
+                className={inputCls}
               />
             </div>
 
@@ -161,33 +361,36 @@ export default function ProviderProfilePage() {
               </label>
               <input
                 type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="+880 1700-123456"
+                className={inputCls}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#06395F]">
-                24/7 Emergency Dispatch Helpline
-              </label>
-              <input
-                type="text"
-                value={emergencyHotline}
-                onChange={(e) => setEmergencyHotline(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#06395F]">
-                District / Area
+                District
               </label>
               <input
                 type="text"
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                placeholder="Dhaka"
+                className={inputCls}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#06395F]">
+                Neighborhood / Area
+              </label>
+              <input
+                type="text"
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                placeholder="e.g. Dhanmondi, Gulshan 2, Uttara"
+                className={inputCls}
               />
             </div>
 
@@ -197,137 +400,134 @@ export default function ProviderProfilePage() {
               </label>
               <input
                 type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                value={line1}
+                onChange={(e) => setLine1(e.target.value)}
+                placeholder="e.g. House 42, Road 9/A"
+                className={inputCls}
               />
             </div>
           </div>
 
           <div className="space-y-1.5 pt-2">
             <label className="text-xs font-semibold text-[#06395F]">
-              About Clinic & Philosophy of Care
+              About Practice & Philosophy of Care
             </label>
             <textarea
-              value={aboutClinic}
-              onChange={(e) => setAboutClinic(e.target.value)}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full p-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+              placeholder="Provide a concise description of your surgical facilities, modern diagnostic equipment, and veterinary team."
+              className="w-full p-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#0D8BE0] shadow-2xs"
             />
           </div>
         </div>
 
-        {/* Facilities & Amenities */}
-        <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 sm:p-6 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4">
+        {/* Practice Capabilities & Service Modes */}
+        <div className={`${glass} p-5 sm:p-6 space-y-4`}>
           <h2 className="text-base font-bold text-[#06395F] flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#0D8BE0]" />
-            <span>Clinic Facilities & Diagnostic Infrastructure</span>
+            <span>Service Modes & Booking Preferences</span>
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {facilities.map((f) => (
-              <label
-                key={f.id}
-                className={`p-3 rounded-[11px] border flex items-center justify-between cursor-pointer transition ${
-                  f.enabled
-                    ? "bg-sky-50/70 border-sky-200 text-[#06395F]"
-                    : "bg-slate-50 border-slate-200 text-slate-500"
-                }`}
-              >
-                <span className="text-xs font-semibold">{f.name}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Service Modes */}
+            <div className="p-4 rounded-[11px] border border-[#06395F]/15 bg-white space-y-3">
+              <span className="text-xs font-bold text-[#06395F] block">
+                Appointment Locations Offered
+              </span>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs text-[#06395F] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inClinic}
+                    onChange={(e) => setInClinic(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0D8BE0] focus:ring-[#0D8BE0]"
+                  />
+                  <span>In-Clinic Visits (Clients visit your practice)</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-[#06395F] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={homeVisit}
+                    onChange={(e) => setHomeVisit(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0D8BE0] focus:ring-[#0D8BE0]"
+                  />
+                  <span>Home Visits (Veterinarians travel to pet home)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Auto Accept */}
+            <div className="p-4 rounded-[11px] border border-[#06395F]/15 bg-white space-y-3">
+              <span className="text-xs font-bold text-[#06395F] block">
+                Booking Confirmation Automation
+              </span>
+              <label className="flex items-start gap-2 text-xs text-[#06395F] cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={f.enabled}
-                  onChange={() => handleToggleFacility(f.id)}
-                  className="rounded text-[#0D8BE0] focus:ring-[#0D8BE0]"
+                  checked={autoAcceptBookings}
+                  onChange={(e) => setAutoAcceptBookings(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#0D8BE0] focus:ring-[#0D8BE0] mt-0.5"
                 />
+                <div>
+                  <span className="font-semibold block">Instant Booking Confirmation</span>
+                  <span className="text-[11px] text-[#0B4C7A]/70 leading-normal block mt-0.5">
+                    Automatically confirm bookings when payment is escrowed without requiring manual review.
+                  </span>
+                </div>
               </label>
-            ))}
+            </div>
           </div>
         </div>
 
-        {/* Attending Veterinarians */}
-        <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 sm:p-6 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4">
+        {/* Real Team & Attending Veterinarians (Synced from /staff) */}
+        <div className={`${glass} p-5 sm:p-6 space-y-4`}>
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-[#06395F] flex items-center gap-2">
-              <Stethoscope className="w-4 h-4 text-[#0D8BE0]" />
-              <span>Attending Veterinarians ({doctors.length})</span>
+              <Users className="w-4 h-4 text-[#0D8BE0]" />
+              <span>Practice Staff & Attending Doctors ({staff.length})</span>
             </h2>
 
-            <button
-              type="button"
-              onClick={() => setShowAddDoc(!showAddDoc)}
+            <Link
+              href="/dashboard/provider/staff"
               className="inline-flex items-center gap-1 text-xs font-semibold text-[#0D8BE0] hover:underline"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add doctor</span>
-            </button>
+              <span>Manage Staff</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {doctors.map((doc) => (
-              <div
-                key={doc.id}
-                className="p-3.5 rounded-[11px] border border-[#06395F]/15 bg-white flex items-start justify-between gap-3"
-              >
-                <div>
-                  <h3 className="font-bold text-xs text-[#06395F]">{doc.name}</h3>
-                  <p className="text-[11px] text-[#0D8BE0] font-medium">{doc.specialty}</p>
-                  <p className="text-[10px] text-[#06395F]/60 mt-0.5">{doc.credentials}</p>
+          {staff.length === 0 ? (
+            <div className="p-6 rounded-[11px] border border-dashed border-sky-200 bg-sky-50/50 text-center">
+              <p className="text-xs text-[#06395F]/75">
+                No staff members listed yet. Add doctors, surgeons, and nurses in the{" "}
+                <Link href="/dashboard/provider/staff" className="font-bold text-[#0D8BE0] underline">
+                  Staff Directory
+                </Link>
+                .
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {staff.map((m, idx) => (
+                <div
+                  key={m.id || m._id || idx}
+                  className="p-3.5 rounded-[11px] border border-[#06395F]/15 bg-white shadow-2xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-xs text-[#06395F]">{m.name}</h3>
+                    <span className="text-[10px] font-semibold text-[#0D8BE0] bg-sky-50 px-2 py-0.5 rounded-[8px] border border-sky-200">
+                      {m.role}
+                    </span>
+                  </div>
+                  {m.title && (
+                    <p className="text-[11px] text-[#0B4C7A]/70 mt-1">{m.title}</p>
+                  )}
+                  {m.phone && (
+                    <p className="text-[10px] text-[#0B4C7A]/50 mt-0.5">{m.phone}</p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveDoctor(doc.id)}
-                  className="text-rose-500 hover:text-rose-700 p-1"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {showAddDoc && (
-            <div className="p-4 rounded-[11px] bg-sky-50/60 border border-sky-200 space-y-3 animate-in fade-in">
-              <h3 className="font-bold text-xs text-[#06395F]">Add New Attending Doctor</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <input
-                  type="text"
-                  placeholder="Doctor Name (e.g. Dr. Kazi Arif)"
-                  value={newDocName}
-                  onChange={(e) => setNewDocName(e.target.value)}
-                  className="h-9 px-3 rounded-[9px] border border-[#06395F]/20 text-xs bg-white"
-                />
-                <input
-                  type="text"
-                  placeholder="Degrees (e.g. DVM, MS BAU)"
-                  value={newDocCredentials}
-                  onChange={(e) => setNewDocCredentials(e.target.value)}
-                  className="h-9 px-3 rounded-[9px] border border-[#06395F]/20 text-xs bg-white"
-                />
-                <input
-                  type="text"
-                  placeholder="Specialty (e.g. Feline Care)"
-                  value={newDocSpecialty}
-                  onChange={(e) => setNewDocSpecialty(e.target.value)}
-                  className="h-9 px-3 rounded-[9px] border border-[#06395F]/20 text-xs bg-white"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddDoc(false)}
-                  className="px-3 py-1.5 rounded-[9px] border border-slate-300 text-xs text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddDoctor}
-                  className="px-3 py-1.5 rounded-[9px] bg-[#0D8BE0] text-white text-xs font-semibold"
-                >
-                  Save doctor
-                </button>
-              </div>
+              ))}
             </div>
           )}
         </div>
@@ -336,10 +536,17 @@ export default function ProviderProfilePage() {
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 transition"
+            disabled={saving}
+            className={primaryBtn}
           >
-            <Save className="w-4 h-4" />
-            <span>Save practice profile</span>
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Save Practice Profile</span>
+              </>
+            )}
           </button>
         </div>
       </form>

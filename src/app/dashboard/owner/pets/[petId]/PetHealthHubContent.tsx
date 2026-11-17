@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Dog,
@@ -36,6 +36,7 @@ import { ExpiryPill } from "@/components/modules/vault/ExpiryPill";
 import { UploadDocumentModal } from "@/components/modules/vault/UploadDocumentModal";
 import { DocumentViewerModal } from "@/components/modules/vault/DocumentViewerModal";
 import type { PetDocument } from "@/types";
+import { apiClient } from "@/lib/api/client";
 
 export default function PetHealthHubContent({ petId }: { petId: string }) {
   const [activeTab, setActiveTab] = useState<
@@ -94,7 +95,7 @@ export default function PetHealthHubContent({ petId }: { petId: string }) {
   };
 
   // Pet details
-  const pet = {
+  const [pet, setPet] = useState({
     id: petId,
     name: "Miu Miu",
     species: "Persian Cat",
@@ -104,7 +105,55 @@ export default function PetHealthHubContent({ petId }: { petId: string }) {
     microchip: "BD-9820019283",
     currentWeight: 4.5,
     allergies: ["Chicken Protein", "Grain filler"],
-  };
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    if (petId) {
+      apiClient
+        .get(`/pets/${petId}`)
+        .then((res) => {
+          const p = res.data?.data;
+          if (p && isMounted) {
+            setPet({
+              id: p._id || p.id,
+              name: p.name,
+              species: p.species?.name || p.species || "Companion Pet",
+              breed: p.customBreed || p.breed || "Domestic breed",
+              gender: p.gender || "Female",
+              dob: p.dob || "2024-03-15",
+              microchip: p.microchipId || "BD-PET-VERIFIED",
+              currentWeight: p.weightKg || 4.5,
+              allergies: Array.isArray(p.allergies) ? p.allergies : [],
+            });
+          }
+        })
+        .catch(() => {});
+
+      apiClient
+        .get(`/pets/${petId}/documents`)
+        .then((res) => {
+          const docs = res.data?.data;
+          if (Array.isArray(docs) && docs.length > 0 && isMounted) {
+            setDocuments(docs);
+          }
+        })
+        .catch(() => {});
+
+      apiClient
+        .get(`/pets/${petId}/vaccinations`)
+        .then((res) => {
+          const vacs = res.data?.data;
+          if (Array.isArray(vacs) && vacs.length > 0 && isMounted) {
+            setVaccinations(vacs);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [petId]);
 
   // Mock Vaccinations
   const [vaccinations, setVaccinations] = useState([

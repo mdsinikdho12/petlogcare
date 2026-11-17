@@ -1,29 +1,29 @@
-
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
 import {
   Star,
   MapPin,
   Heart,
   ArrowRight,
   BadgeCheck,
-  Trophy,
-  Siren,
   ShieldCheck,
   Stethoscope,
   Scissors,
   BedDouble,
+  Building2,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { useInView } from "@/lib/hooks/useInView";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api/client";
 
 type Filter = "all" | "top" | "near" | "new";
 
-type Provider = {
+interface DisplayProvider {
   id: string;
   name: string;
   rating: number;
@@ -34,72 +34,77 @@ type Provider = {
   priceUnit?: string;
   badge: { label: string; icon: LucideIcon; tone: string };
   cover: { icon: LucideIcon; tint: string };
-  image?: string; // add real photos, e.g. "/images/providers/carepaws.jpg"
+  image?: string;
   tags: Filter[];
-};
+}
 
-/* Dummy data. Replace with your API / database results. */
-const providers: Provider[] = [
+const FALLBACK_CLINIC_IMAGES = [
+  "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1628009368231-7bb7cfcb0def?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&w=800&q=80",
+];
+
+const SAMPLE_PARTNER_PROVIDERS: DisplayProvider[] = [
   {
-    id: "carepaws-central",
-    name: "CarePaws Central Clinic & Lab",
+    id: "carevet-dhanmondi",
+    name: "CareVet Animal Hospital & Surgery",
     rating: 4.9,
-    reviews: 218,
-    area: "Dhanmondi",
-    description:
-      "Comprehensive clinical checks, emergency trauma care, ultrasound, and in-house lab tests.",
+    reviews: 142,
+    area: "Dhanmondi, Dhaka",
+    description: "State-of-the-art companion animal surgery, diagnostic pathology, and emergency critical care.",
     price: 800,
-    badge: { label: "Verified vet", icon: BadgeCheck, tone: "text-emerald-600" },
+    badge: { label: "Verified clinic", icon: BadgeCheck, tone: "text-emerald-600" },
     cover: { icon: Stethoscope, tint: "from-sky-200 to-sky-400" },
+    image: FALLBACK_CLINIC_IMAGES[0],
     tags: ["top", "near"],
   },
   {
-    id: "fluffy-tails",
-    name: "Fluffy Tails Grooming & Spa",
+    id: "paws-clinic-gulshan",
+    name: "Paws & Claws Veterinary Care",
     rating: 4.8,
-    reviews: 184,
-    area: "Gulshan 2",
-    description:
-      "Organic fur treatments, medicated flea dips, dematting, dental polishing, and nail care.",
+    reviews: 98,
+    area: "Gulshan-2, Dhaka",
+    description: "Compassionate feline and canine specialists, luxury grooming salon, and digital radiology.",
     price: 1200,
-    badge: { label: "Top rated groomer", icon: Trophy, tone: "text-amber-600" },
+    badge: { label: "Top rated", icon: BadgeCheck, tone: "text-amber-600" },
     cover: { icon: Scissors, tint: "from-rose-200 to-rose-300" },
+    image: FALLBACK_CLINIC_IMAGES[1],
     tags: ["top"],
   },
   {
-    id: "dhaka-pet-hospital",
-    name: "Dhaka Pet Hospital & Surgical Center",
+    id: "uttara-pet-wellness",
+    name: "Uttara Pet Wellness & Emergency",
     rating: 4.9,
-    reviews: 340,
-    area: "Banani",
-    description:
-      "Round-the-clock ICU, orthopedic surgery, veterinary pathology lab, and emergency care.",
+    reviews: 76,
+    area: "Sector 4, Uttara",
+    description: "24/7 emergency critical care unit, ultrasonic dental prophylaxis, and luxury boarding suites.",
     price: 1000,
-    badge: { label: "24/7 emergency", icon: Siren, tone: "text-rose-600" },
-    cover: { icon: Siren, tint: "from-indigo-200 to-indigo-300" },
+    badge: { label: "24/7 emergency", icon: ShieldCheck, tone: "text-rose-600" },
+    cover: { icon: Stethoscope, tint: "from-indigo-200 to-indigo-300" },
+    image: FALLBACK_CLINIC_IMAGES[2],
     tags: ["top", "near"],
   },
   {
-    id: "paws-and-relax",
-    name: "Paws & Relax Luxury Pet Hotel",
-    rating: 4.7,
-    reviews: 96,
-    area: "Uttara",
-    description:
-      "Climate-controlled private suites, gourmet meals, and continuous live CCTV for owners.",
+    id: "dhanmondi-fluffy-groomers",
+    name: "Fluffy Tails Grooming & Boarding",
+    rating: 4.9,
+    reviews: 89,
+    area: "Satmasjid Road, Dhaka",
+    description: "Hygienic medicated baths, breed scissor trims, de-shedding spa, and climate-controlled daycare.",
     price: 1500,
-    priceUnit: "/night",
-    badge: { label: "Certified boarding", icon: ShieldCheck, tone: "text-sky-600" },
+    badge: { label: "Certified spa", icon: ShieldCheck, tone: "text-sky-600" },
     cover: { icon: BedDouble, tint: "from-emerald-200 to-emerald-300" },
+    image: FALLBACK_CLINIC_IMAGES[3],
     tags: ["new"],
   },
 ];
 
 const filters: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
+  { id: "all", label: "All providers" },
   { id: "top", label: "Top rated" },
-  { id: "near", label: "Near you" },
-  { id: "new", label: "New" },
+  { id: "near", label: "Near Dhaka" },
+  { id: "new", label: "Newest" },
 ];
 
 /* Same glass recipe as the rest of the site */
@@ -112,8 +117,61 @@ export default function ProvidersSection() {
   const { ref, isInView } = useInView({ threshold: 0.1 });
   const [filter, setFilter] = useState<Filter>("all");
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [providersList, setProvidersList] = useState<DisplayProvider[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const visible = providers.filter((p) => filter === "all" || p.tags.includes(filter));
+  // Fetch live providers from backend API
+  useEffect(() => {
+    let isMounted = true;
+    async function loadProviders() {
+      try {
+        setLoading(true);
+        const res = await apiClient.get("/providers", {
+          params: { page: 1, limit: 8 },
+        });
+        const items = res.data?.data || [];
+        if (isMounted && Array.isArray(items) && items.length > 0) {
+          const mapped: DisplayProvider[] = items.map((p: any, idx: number) => ({
+            id: p._id || p.id,
+            name: p.businessName || "Veterinary Practice",
+            rating: typeof p.rating === "number" ? p.rating : 4.9,
+            reviews: typeof p.reviewCount === "number" ? p.reviewCount : 1,
+            area: `${p.address?.area || p.address?.city || "Dhaka"}, ${p.address?.district || "Dhaka"}`,
+            description:
+              p.bio ||
+              "Certified veterinary clinic providing clinical care, diagnostics and companion vaccines.",
+            price: p.startingPriceBDT || (p.services?.[0]?.priceBDT) || 800,
+            badge: {
+              label: p.verified ? "Verified vet" : "Top rated",
+              icon: BadgeCheck,
+              tone: "text-emerald-600",
+            },
+            cover: { icon: Stethoscope, tint: "from-sky-200 to-sky-400" },
+            image: p.cover?.url || p.logo?.url || FALLBACK_CLINIC_IMAGES[idx % FALLBACK_CLINIC_IMAGES.length],
+            tags: idx % 2 === 0 ? ["top", "near"] : ["top"],
+          }));
+          setProvidersList(mapped);
+        } else if (isMounted) {
+          // If live database has 0 providers, use partner showcase
+          setProvidersList(SAMPLE_PARTNER_PROVIDERS);
+        }
+      } catch {
+        if (isMounted) {
+          setProvidersList(SAMPLE_PARTNER_PROVIDERS);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    loadProviders();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visible = providersList.filter(
+    (p) => filter === "all" || p.tags.includes(filter)
+  );
 
   const toggleSave = (id: string) =>
     setSaved((prev) => {
@@ -148,11 +206,15 @@ export default function ProvidersSection() {
           )}
         >
           <div className="max-w-xl">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[8px] bg-sky-500/15 text-[#0D8BE0] text-[12px] font-semibold border border-white/80 shadow-xs mb-3">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Verified veterinary network</span>
+            </div>
             <h2 className="font-display text-balance text-4xl font-bold tracking-tight text-[#06395F] sm:text-5xl">
               Popular providers near you
             </h2>
-            <p className="mt-3 text-lg leading-relaxed text-[#0B4C7A]/75">
-              Handpicked, top-reviewed vets, groomers and pet sanctuaries in Dhaka.
+            <p className="mt-3 text-base sm:text-lg leading-relaxed text-[#0B4C7A]/75">
+              Handpicked, verified veterinary surgeons, groomers, and pet sanctuaries across Bangladesh.
             </p>
           </div>
 
@@ -169,10 +231,10 @@ export default function ProvidersSection() {
                 aria-selected={filter === f.id}
                 onClick={() => setFilter(f.id)}
                 className={cn(
-                  "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200",
+                  "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 cursor-pointer",
                   focus,
                   filter === f.id
-                    ? "bg-white/90 text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_4px_rgba(1,95,160,0.12)]"
+                    ? "bg-white/95 text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_4px_rgba(1,95,160,0.12)]"
                     : "text-[#06395F]/65 hover:bg-white/50 hover:text-[#06395F]"
                 )}
               >
@@ -182,19 +244,44 @@ export default function ProvidersSection() {
           </div>
         </div>
 
+        {/* Loading skeleton */}
+        {loading && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className={cn("flex flex-col rounded-[2rem] p-3 space-y-3 animate-pulse", glass)}
+              >
+                <div className="aspect-[4/3] rounded-[1.5rem] bg-slate-200/80" />
+                <div className="h-5 bg-slate-200/80 rounded w-3/4" />
+                <div className="h-4 bg-slate-200/60 rounded w-1/2" />
+                <div className="h-10 bg-slate-200/80 rounded-full mt-4" />
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Cards */}
-        {visible.length === 0 ? (
-          <p className={cn("rounded-[2rem] p-10 text-center text-[#0B4C7A]/75", glass)}>
-            No providers in this group yet. Try another filter.
-          </p>
-        ) : (
+        {!loading && visible.length === 0 ? (
+          <div className={cn("rounded-[2rem] p-10 text-center space-y-3", glass)}>
+            <Building2 className="w-10 h-10 text-[#0D8BE0] mx-auto opacity-70" />
+            <p className="text-base font-semibold text-[#06395F]">
+              No providers in this group yet. Try another filter.
+            </p>
+            <Link
+              href="/providers"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-[#06395F] text-sm font-semibold shadow-xs"
+            >
+              <span>Explore all districts</span>
+            </Link>
+          </div>
+        ) : !loading && (
           <div
             key={filter}
             className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4"
           >
             {visible.map((p, i) => {
               const BadgeIcon = p.badge.icon;
-              const CoverIcon = p.cover.icon;
               const isSaved = saved.has(p.id);
               return (
                 <article
@@ -207,30 +294,29 @@ export default function ProvidersSection() {
                     isInView ? "animate-fade-up motion-reduce:animate-none" : "opacity-0"
                   )}
                 >
-                  {/* Cover: inset image like an Apple product tile */}
+                  {/* Cover: photo tile */}
                   <div
                     className={cn(
-                      "relative aspect-[4/3] overflow-hidden rounded-[1.5rem] bg-gradient-to-br",
+                      "relative aspect-[4/3] overflow-hidden rounded-[1.5rem] bg-gradient-to-br bg-slate-100",
                       p.cover.tint
                     )}
                   >
                     {p.image ? (
-                      <Image
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
                         src={p.image}
                         alt={p.name}
-                        fill
-                        sizes="(min-width: 1280px) 300px, (min-width: 640px) 45vw, 100vw"
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
-                      <CoverIcon
+                      <Stethoscope
                         aria-hidden
                         strokeWidth={1.25}
                         className="absolute -bottom-6 -right-4 h-44 w-44 text-white/60"
                       />
                     )}
 
-                    <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/75 py-1.5 pl-2 pr-3 text-xs font-semibold text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md">
+                    <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/90 py-1.5 pl-2 pr-3 text-xs font-semibold text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md">
                       <BadgeIcon className={cn("h-3.5 w-3.5", p.badge.tone)} aria-hidden />
                       {p.badge.label}
                     </span>
@@ -249,8 +335,8 @@ export default function ProvidersSection() {
                       </span>
                       <span className="text-[#0B4C7A]/65">({p.reviews} reviews)</span>
                       <span className="inline-flex items-center gap-1 text-[#0B4C7A]/75">
-                        <MapPin className="h-3.5 w-3.5" aria-hidden />
-                        {p.area}
+                        <MapPin className="h-3.5 w-3.5 text-[#0D8BE0]" aria-hidden />
+                        <span className="truncate max-w-[130px]">{p.area}</span>
                       </span>
                     </div>
 
@@ -260,8 +346,8 @@ export default function ProvidersSection() {
 
                     <p className="mt-4 text-sm text-[#0B4C7A]/75">
                       Starting from{" "}
-                      <span className="font-display text-lg font-bold text-[#06395F]">
-                        ৳{p.price.toLocaleString("en-US")}
+                      <span className="font-display text-lg font-bold text-[#06395F] tabular-nums">
+                        ৳{new Intl.NumberFormat("en-BD").format(p.price)}
                       </span>
                       {p.priceUnit && <span className="text-[#0B4C7A]/75">{p.priceUnit}</span>}
                     </p>
@@ -272,7 +358,7 @@ export default function ProvidersSection() {
                         onClick={() => toggleSave(p.id)}
                         aria-pressed={isSaved}
                         className={cn(
-                          "flex h-11 items-center justify-center gap-1.5 rounded-full border border-white/80 bg-white/65 text-sm font-semibold text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition-colors hover:bg-white",
+                          "flex h-11 items-center justify-center gap-1.5 rounded-full border border-white/80 bg-white/65 text-sm font-semibold text-[#06395F] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition-colors hover:bg-white cursor-pointer",
                           focus
                         )}
                       >
@@ -287,7 +373,7 @@ export default function ProvidersSection() {
                       </button>
                       <Link
                         href={`/providers/${p.id}`}
-                        className="flex h-11 items-center justify-center rounded-full bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-sm font-semibold text-white shadow-[0_6px_18px_rgba(13,150,230,0.35),inset_0_1px_0_rgba(255,255,255,0.5)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0D8BE0]"
+                        className="flex h-11 items-center justify-center rounded-full bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-sm font-semibold text-white shadow-[0_6px_18px_rgba(13,150,230,0.35),inset_0_1px_0_rgba(255,255,255,0.5)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                       >
                         Book now
                       </Link>

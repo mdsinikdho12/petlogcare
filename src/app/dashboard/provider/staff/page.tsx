@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Users,
@@ -13,242 +13,322 @@ import {
   Trash2,
   ShieldCheck,
   X,
+  RotateCw,
+  Sparkles,
 } from "lucide-react";
-import type { ProviderStaff } from "@/types";
+import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
+
+interface ProviderStaff {
+  id: string;
+  name: string;
+  roleTitle: string;
+  phone: string;
+  isActive: boolean;
+}
 
 export default function ProviderStaffPage() {
-  const [staffList, setStaffList] = useState<ProviderStaff[]>([
-    {
-      id: "staff-1",
-      name: "Dr. Nazmul Hasan",
-      roleTitle: "Consultant Veterinary Surgeon",
-      phone: "+8801712345678",
-      isActive: true,
-    },
-    {
-      id: "staff-2",
-      name: "Sabrina Akter",
-      roleTitle: "Lead Pet Groomer",
-      phone: "+8801812345678",
-      isActive: true,
-    },
-  ]);
-
+  const [staffList, setStaffList] = useState<ProviderStaff[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [roleTitle, setRoleTitle] = useState("Junior Veterinarian");
-  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleAddStaff = (e: React.FormEvent) => {
+  const [name, setName] = useState("");
+  const [roleTitle, setRoleTitle] = useState("Consultant Veterinarian");
+  const [phone, setPhone] = useState("+880 1700-000000");
+
+  const fetchStaff = async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get("/providers/me/staff");
+      const list = res.data?.data || [];
+      if (Array.isArray(list)) {
+        const mapped: ProviderStaff[] = list.map((s: any) => ({
+          id: s._id || s.id,
+          name: s.name,
+          roleTitle: s.roleTitle || s.role || "Attending Veterinarian",
+          phone: s.phone || "",
+          isActive: s.isActive ?? true,
+        }));
+        setStaffList(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load staff list:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStaff();
+  }, []);
+
+  const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone) {
-      toast.error("Please enter staff name and phone number");
+    if (!name.trim() || !phone.trim()) {
+      toast.error("Please enter staff member name and phone number");
       return;
     }
 
-    const newStaff: ProviderStaff = {
-      id: Math.random().toString(),
-      name,
-      roleTitle,
-      phone,
-      isActive: true,
-    };
-
-    setStaffList((prev) => [newStaff, ...prev]);
-    toast.success("Staff member added successfully!");
-    setName("");
-    setPhone("");
-    setModalOpen(false);
+    try {
+      setSaving(true);
+      await apiClient.post("/providers/me/staff", {
+        name: name.trim(),
+        roleTitle: roleTitle.trim(),
+        phone: phone.trim(),
+      });
+      toast.success("Staff member added to clinic!");
+      setName("");
+      setPhone("+880 1700-000000");
+      setModalOpen(false);
+      fetchStaff();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to add staff member");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleActive = (id: string) => {
-    setStaffList((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s))
-    );
-    toast.info("Staff status updated");
+  const toggleActive = async (s: ProviderStaff) => {
+    try {
+      await apiClient.patch(`/providers/me/staff/${s.id}`, {
+        isActive: !s.isActive,
+      });
+      toast.info(`Staff status updated`);
+      fetchStaff();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update staff status");
+    }
   };
 
-  const removeStaff = (id: string) => {
-    setStaffList((prev) => prev.filter((s) => s.id !== id));
-    toast.info("Staff member removed");
+  const removeStaff = async (id: string, name: string) => {
+    if (confirm(`Remove ${name} from clinic team?`)) {
+      try {
+        await apiClient.delete(`/providers/me/staff/${id}`);
+        toast.info("Staff member removed");
+        fetchStaff();
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || "Failed to remove staff member");
+      }
+    }
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 sm:space-y-6">
+      {/* Top Banner (Liquid Glass) */}
+      <div className="rounded-[13px] border border-white/80 bg-white/55 p-6 sm:p-7 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(1,95,160,0.10),inset_0_1px_0_rgba(255,255,255,0.95)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#06395F]">
-            Staff & Team Management
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-sky-500/15 text-[#0D8BE0] text-[12px] font-semibold mb-2.5 border border-white/80 shadow-xs">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Clinic roster</span>
+          </div>
+          <h1 className="font-display text-2xl sm:text-[28px] font-bold tracking-tight text-[#06395F]">
+            Staff &amp; Team Management
           </h1>
-          <p className="text-xs sm:text-sm text-[#0B4C7A]/75 mt-0.5 font-light">
-            Assign vets, technicians, and pet care assistants to manage incoming patient bookings.
+          <p className="text-[13px] sm:text-sm text-[#06395F]/80 mt-1 max-w-xl font-normal leading-relaxed">
+            Assign licensed vets, technicians, and pet care assistants to manage incoming patient bookings.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#2FB0FF] to-[#0D8BE0] hover:from-[#259DE6] hover:to-[#0A77C2] text-white text-xs font-semibold shadow-md shadow-[#0D8BE0]/30 transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Staff Member</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={fetchStaff}
+            disabled={loading}
+            className="p-2.5 rounded-[11px] bg-white border border-[#06395F]/15 text-[#06395F] hover:bg-slate-50 transition shadow-2xs"
+            title="Refresh staff roster"
+          >
+            <RotateCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 active:translate-y-0 transition shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add team member</span>
+          </button>
+        </div>
       </div>
 
-      {/* Staff Table Glass Panel */}
-      <div className="rounded-[2.5rem] border border-white/70 bg-white/55 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_10px_40px_rgba(1,95,160,0.1),inset_0_1px_0_rgba(255,255,255,0.9)] overflow-hidden">
-        {staffList.length === 0 ? (
-          <div className="text-center py-12 space-y-2">
-            <Users className="w-10 h-10 mx-auto text-[#0D8BE0]/40" />
-            <h3 className="text-sm font-bold text-[#06395F]">
-              No staff members added yet
+      {/* Loading Skeleton */}
+      {loading && staffList.length === 0 && (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 space-y-3 animate-pulse shadow-xs"
+            >
+              <div className="h-5 bg-slate-200 rounded w-1/4" />
+              <div className="h-4 bg-slate-200 rounded w-1/3" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && staffList.length === 0 && (
+        <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-10 sm:p-14 text-center space-y-4 shadow-[0_1px_2px_rgba(6,57,95,0.06)]">
+          <div className="w-14 h-14 mx-auto rounded-[13px] bg-sky-50 text-[#0D8BE0] flex items-center justify-center border border-sky-100 shadow-xs">
+            <Users className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="font-display text-lg font-bold text-[#06395F]">
+              No team members registered yet
             </h3>
-            <p className="text-xs text-[#0B4C7A]/70 max-w-xs mx-auto">
-              Add your doctors, groomers, and assistants to let clients know who will take care of their pets.
+            <p className="text-[13px] text-[#06395F]/75 leading-relaxed font-normal">
+              Add your attending veterinarians, vet assistants and grooming staff to assign appointments and delegate consultations.
             </p>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#06395F]/10 text-[#0B4C7A]/70 uppercase tracking-wider font-semibold text-[10px]">
-                  <th className="pb-3 pl-2">Staff Name</th>
-                  <th className="pb-3">Role / Specialty</th>
-                  <th className="pb-3">Phone</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3 pr-2 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/60">
-                {staffList.map((staff) => (
-                  <tr key={staff.id} className="hover:bg-white/40 transition-colors">
-                    <td className="py-3.5 pl-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-[#0D8BE0] text-white font-bold flex items-center justify-center text-xs shadow-xs">
-                          {staff.name.charAt(0)}
-                        </div>
-                        <span className="font-bold text-[#06395F]">
-                          {staff.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 text-[#06395F] font-medium">
-                      {staff.roleTitle}
-                    </td>
-                    <td className="py-3.5 text-[#0B4C7A]/80">{staff.phone}</td>
-                    <td className="py-3.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleActive(staff.id)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          staff.isActive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-gray-100 text-gray-500 border-gray-200"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            staff.isActive ? "bg-emerald-500" : "bg-gray-400"
-                          }`}
-                        />
-                        <span>{staff.isActive ? "Active" : "Inactive"}</span>
-                      </button>
-                    </td>
-                    <td className="py-3.5 pr-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeStaff(staff.id)}
-                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
-                        title="Remove Staff"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] px-5 py-2.5 text-[13px] font-semibold text-white shadow-xs hover:-translate-y-0.5 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add team member</span>
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Staff List Grid (Solid Surfaces) */}
+      {!loading && staffList.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {staffList.map((s) => (
+            <div
+              key={s.id}
+              className={`rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 shadow-[0_1px_2px_rgba(6,57,95,0.06)] flex items-start justify-between gap-4 transition hover:border-[#0D8BE0]/30 ${
+                !s.isActive ? "opacity-60 bg-white/60" : ""
+              }`}
+            >
+              <div className="flex items-start gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-[11px] bg-sky-500/15 text-[#0D8BE0] flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                  {s.name[0]}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-base font-bold text-[#06395F] truncate">
+                      {s.name}
+                    </h3>
+                    <StatusBadge
+                      status={s.isActive ? "ACTIVE" : "PENDING"}
+                      label={s.isActive ? "Active" : "Inactive"}
+                    />
+                  </div>
+                  <div className="text-[12px] font-semibold text-[#0D8BE0] truncate">
+                    {s.roleTitle}
+                  </div>
+                  <div className="text-[12px] text-[#06395F]/75 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-[#06395F]/40" />
+                    <span>{s.phone}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => toggleActive(s)}
+                  className="px-2.5 py-1 rounded-[8px] border border-[#06395F]/15 hover:bg-slate-50 text-[11px] font-semibold text-[#06395F]"
+                >
+                  {s.isActive ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeStaff(s.id, s.name)}
+                  className="p-1.5 rounded-[8px] text-[#06395F]/40 hover:text-rose-600 hover:bg-rose-50 transition"
+                  title="Remove staff member"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Staff Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-[2.5rem] border border-white/80 bg-white/90 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#06395F]/10">
-              <h3 className="text-base font-bold text-[#06395F]">
-                Add Staff Member
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-[13px] border border-white/80 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#06395F]/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-[8px] bg-sky-500/15 text-[#0D8BE0] flex items-center justify-center">
+                  <Users className="w-4 h-4" />
+                </div>
+                <h3 className="font-display text-base font-bold text-[#06395F]">
+                  Add clinic staff member
+                </h3>
+              </div>
               <button
+                type="button"
                 onClick={() => setModalOpen(false)}
-                className="p-1 rounded-full text-[#06395F] hover:bg-black/5"
+                className="p-1.5 rounded-[8px] hover:bg-slate-100 text-[#06395F]/60"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleAddStaff} className="space-y-4 text-xs">
+            <form onSubmit={handleAddStaff} className="space-y-3.5 text-[13px]">
               <div>
                 <label className="block font-semibold text-[#06395F] mb-1">
-                  Full Name *
+                  Full name *
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Dr. Arman Hossain"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-surface-200 bg-white text-xs text-[#06395F] outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                  placeholder="e.g. Dr. Tanvir Ahmed (DVM)"
+                  className="w-full px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-[#06395F] mb-1">
-                  Role Title *
+                  Role / Specialization *
                 </label>
-                <select
+                <input
+                  type="text"
+                  required
                   value={roleTitle}
                   onChange={(e) => setRoleTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-surface-200 bg-white text-xs text-[#06395F] outline-none focus:ring-2 focus:ring-[#0D8BE0]"
-                >
-                  <option value="Senior Veterinarian">Senior Veterinarian</option>
-                  <option value="Junior Veterinarian">Junior Veterinarian</option>
-                  <option value="Consultant Surgeon">Consultant Surgeon</option>
-                  <option value="Senior Groomer">Senior Groomer</option>
-                  <option value="Veterinary Assistant">Veterinary Assistant</option>
-                  <option value="Frontdesk Receptionist">Frontdesk Receptionist</option>
-                </select>
+                  placeholder="e.g. Chief Veterinary Surgeon, Lead Groomer"
+                  className="w-full px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
+                />
               </div>
 
               <div>
                 <label className="block font-semibold text-[#06395F] mb-1">
-                  Phone Number *
+                  Phone number *
                 </label>
                 <input
-                  type="tel"
+                  type="text"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+8801712345678"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-surface-200 bg-white text-xs text-[#06395F] outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                  placeholder="+880 17XXXXXXXXX"
+                  className="w-full px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-[#06395F]/10 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-full border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 rounded-[11px] border border-[#06395F]/15 text-[#06395F] font-semibold hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-full bg-[#0D8BE0] hover:bg-[#0A77C2] text-white text-xs font-semibold shadow-xs"
+                  disabled={saving}
+                  className="px-5 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white font-semibold shadow-xs"
                 >
-                  Save Staff Member
+                  {saving ? "Saving..." : "Add to roster"}
                 </button>
               </div>
             </form>

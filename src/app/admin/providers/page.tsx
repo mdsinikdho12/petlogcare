@@ -1,7 +1,7 @@
 // src/app/admin/providers/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -19,9 +19,11 @@ import {
   Sparkles,
   AlertTriangle,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
 
 interface ProviderVerification {
   id: string;
@@ -34,80 +36,13 @@ interface ProviderVerification {
   phone: string;
   submittedAt: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
-  documents: { title: string; type: string; size: string }[];
+  documents: { title: string; type: string; size: string; url?: string }[];
   notes?: string;
 }
 
-const mockVerifications: ProviderVerification[] = [
-  {
-    id: "pv-1",
-    clinicName: "Bengal Pet Care & Diagnostics",
-    leadDoctor: "Dr. Farhana Yasmin (DVM, MS)",
-    licenseNumber: "TR-DHAKA-2026-8812",
-    degreeCredentials: "BAU Mymensingh • 8 yrs practice",
-    district: "Banani, Dhaka",
-    address: "Road 11, Block D, House 42",
-    phone: "+880 1712-445566",
-    submittedAt: "Today, 10:30 AM",
-    status: "PENDING",
-    documents: [
-      { title: "Trade_License_2026.pdf", type: "PDF Document", size: "2.4 MB" },
-      { title: "BVCA_Registration_Certificate.pdf", type: "PDF Document", size: "1.1 MB" },
-      { title: "Clinic_Premises_Photo.jpg", type: "Image", size: "3.8 MB" },
-    ],
-  },
-  {
-    id: "pv-2",
-    clinicName: "Green Vet Medical Hub",
-    leadDoctor: "Dr. Mahfuzur Rahman (DVM)",
-    licenseNumber: "TR-CTG-2025-4190",
-    degreeCredentials: "CVASU Chittagong • 5 yrs practice",
-    district: "Nasirabad, Chittagong",
-    address: "CDA Avenue, Building 18",
-    phone: "+880 1819-223344",
-    submittedAt: "Yesterday, 04:15 PM",
-    status: "PENDING",
-    documents: [
-      { title: "City_Corporation_Trade_License.pdf", type: "PDF Document", size: "1.8 MB" },
-      { title: "Doctor_Veterinary_License.pdf", type: "PDF Document", size: "950 KB" },
-    ],
-  },
-  {
-    id: "pv-3",
-    clinicName: "CareVet Animal Hospital & Surgery",
-    leadDoctor: "Dr. Samira Khan (DVM, PGD)",
-    licenseNumber: "TR-DHAKA-2024-1102",
-    degreeCredentials: "BAU Mymensingh • 12 yrs practice",
-    district: "Dhanmondi, Dhaka",
-    address: "House 42, Road 9/A",
-    phone: "+880 1812-987654",
-    submittedAt: "28 Sep 2026",
-    status: "APPROVED",
-    documents: [
-      { title: "Trade_License_Verified.pdf", type: "PDF Document", size: "2.1 MB" },
-      { title: "Surgical_Suite_Certification.pdf", type: "PDF Document", size: "1.5 MB" },
-    ],
-  },
-  {
-    id: "pv-4",
-    clinicName: "Mirpur Quick Groomers",
-    leadDoctor: "Kabir Hossain (Technician)",
-    licenseNumber: "PENDING-0012",
-    degreeCredentials: "Grooming Certificate Only",
-    district: "Mirpur, Dhaka",
-    address: "Sector 10, Mirpur",
-    phone: "+880 1611-009988",
-    submittedAt: "02 Nov 2026",
-    status: "REJECTED",
-    notes: "Requires licensed DVM attending veterinarian to qualify as clinical practice.",
-    documents: [
-      { title: "Trade_License_Mirpur.pdf", type: "PDF Document", size: "1.2 MB" },
-    ],
-  },
-];
-
 export default function AdminProvidersPage() {
-  const [verifications, setVerifications] = useState<ProviderVerification[]>(mockVerifications);
+  const [verifications, setVerifications] = useState<ProviderVerification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("PENDING");
   const [search, setSearch] = useState("");
 
@@ -117,24 +52,84 @@ export default function AdminProvidersPage() {
   // Reject Modal
   const [rejecting, setRejecting] = useState<ProviderVerification | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const filtered = verifications.filter((v) => {
-    const matchesStatus = statusFilter === "ALL" || v.status === statusFilter;
-    const matchesSearch =
-      v.clinicName.toLowerCase().includes(search.toLowerCase()) ||
-      v.leadDoctor.toLowerCase().includes(search.toLowerCase()) ||
-      v.licenseNumber.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const fetchProviders = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params: Record<string, string> = {};
+      if (statusFilter !== "ALL") params.status = statusFilter;
+      if (search.trim()) params.searchTerm = search.trim();
 
-  const handleApprove = (pv: ProviderVerification) => {
-    setVerifications((prev) =>
-      prev.map((item) =>
-        item.id === pv.id ? { ...item, status: "APPROVED" } : item
-      )
-    );
-    toast.success(`${pv.clinicName} has been approved as a Verified Practice!`);
-    if (inspecting?.id === pv.id) setInspecting(null);
+      const res = await apiClient.get("/providers/admin", { params });
+      const data = res.data?.data || res.data || [];
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data.providers)
+        ? data.providers
+        : [];
+
+      setVerifications(
+        list.map((pv: any) => ({
+          id: pv.id || pv._id,
+          clinicName: pv.businessName || pv.clinicName || "Practice Application",
+          leadDoctor: pv.doctorName || pv.leadDoctor || pv.user?.name || "Licensed Practitioner",
+          licenseNumber: pv.tradeLicense || pv.licenseNumber || "—",
+          degreeCredentials: pv.degree || pv.qualifications || "DVM Certified",
+          district: pv.district || pv.city || "Dhaka",
+          address: pv.address || "—",
+          phone: pv.phone || pv.user?.phone || "—",
+          submittedAt: pv.createdAt
+            ? new Date(pv.createdAt).toLocaleDateString("en-BD", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })
+            : "Recently",
+          status: pv.status || "PENDING",
+          documents: Array.isArray(pv.documents)
+            ? pv.documents.map((d: any) => ({
+                title: d.name || d.title || "Credential Document",
+                type: d.type || "PDF Document",
+                size: d.size || "1.2 MB",
+                url: d.url,
+              }))
+            : [],
+          notes: pv.rejectionReason || pv.notes,
+        }))
+      );
+    } catch (err: any) {
+      setVerifications([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchProviders();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [fetchProviders]);
+
+  const handleApprove = async (pv: ProviderVerification) => {
+    try {
+      setActionLoading(true);
+      await apiClient.patch(`/providers/admin/${pv.id}/verification`, {
+        status: "APPROVED",
+      });
+      setVerifications((prev) =>
+        prev.map((item) =>
+          item.id === pv.id ? { ...item, status: "APPROVED" } : item
+        )
+      );
+      toast.success(`${pv.clinicName} has been approved as a Verified Practice!`);
+      if (inspecting?.id === pv.id) setInspecting(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to approve provider");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleOpenReject = (pv: ProviderVerification) => {
@@ -142,22 +137,33 @@ export default function AdminProvidersPage() {
     setRejectReason("");
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!rejecting) return;
     if (!rejectReason.trim()) {
       toast.error("Please state the inadequate documentation or rejection reason");
       return;
     }
-    setVerifications((prev) =>
-      prev.map((item) =>
-        item.id === rejecting.id
-          ? { ...item, status: "REJECTED", notes: rejectReason }
-          : item
-      )
-    );
-    toast.success(`Verification for ${rejecting.clinicName} has been rejected`);
-    setRejecting(null);
-    if (inspecting?.id === rejecting.id) setInspecting(null);
+    try {
+      setActionLoading(true);
+      await apiClient.patch(`/providers/admin/${rejecting.id}/verification`, {
+        status: "REJECTED",
+        reason: rejectReason.trim(),
+      });
+      setVerifications((prev) =>
+        prev.map((item) =>
+          item.id === rejecting.id
+            ? { ...item, status: "REJECTED", notes: rejectReason }
+            : item
+        )
+      );
+      toast.success(`Verification for ${rejecting.clinicName} has been rejected`);
+      setRejecting(null);
+      if (inspecting?.id === rejecting.id) setInspecting(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to reject provider");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -173,11 +179,22 @@ export default function AdminProvidersPage() {
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[11px] bg-amber-50 border border-amber-200 text-xs text-amber-800 font-semibold">
-          <Clock className="w-4 h-4 text-amber-600" />
-          <span>
-            {verifications.filter((v) => v.status === "PENDING").length} pending reviews
-          </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchProviders}
+            disabled={loading}
+            className="p-2 rounded-[11px] border border-[#06395F]/15 bg-white text-[#06395F] hover:bg-slate-50 transition"
+            aria-label="Refresh providers list"
+          >
+            <RefreshCw className={`w-4 h-4 text-[#0D8BE0] ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[11px] bg-amber-50 border border-amber-200 text-xs text-amber-800 font-semibold">
+            <Clock className="w-4 h-4 text-amber-600" />
+            <span>
+              {verifications.filter((v) => v.status === "PENDING").length} pending reviews
+            </span>
+          </div>
         </div>
       </div>
 
@@ -219,110 +236,131 @@ export default function AdminProvidersPage() {
       </div>
 
       {/* Verification Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filtered.map((pv) => (
-          <div
-            key={pv.id}
-            className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4 hover:border-[#0D8BE0]/30 transition"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-[11px] bg-sky-500/15 border border-sky-300/40 flex items-center justify-center text-[#0D8BE0] shrink-0 mt-0.5">
-                  <Building2 className="w-5 h-5" />
+      {loading ? (
+        <div className="p-12 text-center space-y-3 rounded-[13px] bg-white/85 border border-[#06395F]/10">
+          <RefreshCw className="w-6 h-6 text-[#0D8BE0] animate-spin mx-auto" />
+          <p className="text-xs text-[#06395F]/70 font-medium">Loading verification dossiers...</p>
+        </div>
+      ) : verifications.length === 0 ? (
+        <div className="p-12 text-center space-y-2 rounded-[13px] bg-white/85 border border-[#06395F]/10">
+          <ShieldCheck className="w-10 h-10 text-emerald-500/40 mx-auto" />
+          <h3 className="font-bold text-sm text-[#06395F]">No applications in this view</h3>
+          <p className="text-xs text-[#06395F]/70 max-w-sm mx-auto">
+            {statusFilter === "PENDING"
+              ? "All practice verification requests have been audited and processed."
+              : "No provider profiles found for this filter."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {verifications.map((pv) => (
+            <div
+              key={pv.id}
+              className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4 hover:border-[#0D8BE0]/30 transition"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-[11px] bg-sky-500/15 border border-sky-300/40 flex items-center justify-center text-[#0D8BE0] shrink-0 mt-0.5">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#06395F]">
+                      {pv.clinicName}
+                    </h3>
+                    <p className="text-xs text-[#06395F]/80 font-medium">
+                      {pv.leadDoctor}
+                    </p>
+                    <p className="text-[11px] text-[#06395F]/60">
+                      License: <span className="font-mono">{pv.licenseNumber}</span>
+                    </p>
+                  </div>
                 </div>
+
                 <div>
-                  <h3 className="font-bold text-base text-[#06395F]">
-                    {pv.clinicName}
-                  </h3>
-                  <p className="text-xs text-[#06395F]/80 font-medium">
-                    {pv.leadDoctor}
-                  </p>
-                  <p className="text-[11px] text-[#06395F]/60">
-                    License: <span className="font-mono">{pv.licenseNumber}</span>
-                  </p>
+                  {pv.status === "PENDING" ? (
+                    <StatusBadge status="PENDING" label="Pending verification" />
+                  ) : pv.status === "APPROVED" ? (
+                    <StatusBadge status="APPROVED" label="Verified practice" />
+                  ) : (
+                    <StatusBadge status="CANCELLED" label="Rejected" />
+                  )}
                 </div>
               </div>
 
-              <div>
-                {pv.status === "PENDING" ? (
-                  <StatusBadge status="PENDING" label="Pending verification" />
-                ) : pv.status === "APPROVED" ? (
-                  <StatusBadge status="APPROVED" label="Verified practice" />
-                ) : (
-                  <StatusBadge status="CANCELLED" label="Rejected" />
+              {/* Address & Credentials */}
+              <div className="p-3 rounded-[11px] bg-slate-50 border border-slate-200/60 space-y-1.5 text-xs text-[#06395F]">
+                <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
+                  <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <span>{pv.district} • {pv.address}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>{pv.degreeCredentials}</span>
+                </div>
+              </div>
+
+              {/* Uploaded Documents List */}
+              {pv.documents.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold text-[#06395F]/70">
+                    Uploaded credentials ({pv.documents.length} files)
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {pv.documents.map((doc, idx) => (
+                      <div
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-white border border-[#06395F]/15 text-[11px] text-[#06395F]"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-[#0D8BE0]" />
+                        <span className="font-medium">{doc.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pv.notes && (
+                <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-[8px] border border-rose-200">
+                  Reason: {pv.notes}
+                </p>
+              )}
+
+              {/* Action Bar */}
+              <div className="pt-2 border-t border-[#06395F]/10 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInspecting(pv)}
+                  className="px-3 py-1.5 rounded-[9px] border border-[#06395F]/15 bg-white text-[#06395F] text-xs font-semibold hover:bg-slate-50 transition shadow-2xs inline-flex items-center gap-1"
+                >
+                  <Eye className="w-3.5 h-3.5 text-[#0D8BE0]" />
+                  <span>Inspect dossier</span>
+                </button>
+
+                {pv.status === "PENDING" && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReject(pv)}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 rounded-[9px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition shadow-2xs disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApprove(pv)}
+                      disabled={actionLoading}
+                      className="px-3.5 py-1.5 rounded-[9px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition disabled:opacity-50"
+                    >
+                      Approve practice
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
-
-            {/* Address & Credentials */}
-            <div className="p-3 rounded-[11px] bg-slate-50 border border-slate-200/60 space-y-1.5 text-xs text-[#06395F]">
-              <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
-                <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                <span>{pv.district} • {pv.address}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-[#06395F]/80">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>{pv.degreeCredentials}</span>
-              </div>
-            </div>
-
-            {/* Uploaded Documents List */}
-            <div className="space-y-1.5">
-              <p className="text-[11px] font-semibold text-[#06395F]/70">
-                Uploaded credentials ({pv.documents.length} files)
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {pv.documents.map((doc, idx) => (
-                  <div
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-white border border-[#06395F]/15 text-[11px] text-[#06395F]"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-[#0D8BE0]" />
-                    <span className="font-medium">{doc.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {pv.notes && (
-              <p className="text-[11px] text-rose-700 bg-rose-50 p-2.5 rounded-[8px] border border-rose-200">
-                Reason: {pv.notes}
-              </p>
-            )}
-
-            {/* Action Bar */}
-            <div className="pt-2 border-t border-[#06395F]/10 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setInspecting(pv)}
-                className="px-3 py-1.5 rounded-[9px] border border-[#06395F]/15 bg-white text-[#06395F] text-xs font-semibold hover:bg-slate-50 transition shadow-2xs inline-flex items-center gap-1"
-              >
-                <Eye className="w-3.5 h-3.5 text-[#0D8BE0]" />
-                <span>Inspect dossier</span>
-              </button>
-
-              {pv.status === "PENDING" && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenReject(pv)}
-                    className="px-3 py-1.5 rounded-[9px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition shadow-2xs"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(pv)}
-                    className="px-3.5 py-1.5 rounded-[9px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition"
-                  >
-                    Approve practice
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Dossier Inspection Modal */}
       {inspecting && (
@@ -353,28 +391,43 @@ export default function AdminProvidersPage() {
 
               <div>
                 <h3 className="font-bold text-xs text-[#06395F] mb-2">
-                  Uploaded Documents & Certifications (Cloudinary 5-min signed links)
+                  Uploaded Documents & Certifications
                 </h3>
-                <div className="space-y-2">
-                  {inspecting.documents.map((doc, i) => (
-                    <div
-                      key={i}
-                      className="p-3 rounded-[11px] border border-[#06395F]/15 bg-white flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-[#0D8BE0]" />
-                        <div>
-                          <p className="font-semibold text-xs text-[#06395F]">{doc.title}</p>
-                          <p className="text-[10px] text-[#06395F]/60">{doc.type} • {doc.size}</p>
+                {inspecting.documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {inspecting.documents.map((doc, i) => (
+                      <div
+                        key={i}
+                        className="p-3 rounded-[11px] border border-[#06395F]/15 bg-white flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-[#0D8BE0]" />
+                          <div>
+                            <p className="font-semibold text-xs text-[#06395F]">{doc.title}</p>
+                            <p className="text-[10px] text-[#06395F]/60">{doc.type} • {doc.size}</p>
+                          </div>
                         </div>
+                        {doc.url ? (
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-semibold text-[#0D8BE0] hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>Open file</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">Available on server</span>
+                        )}
                       </div>
-                      <span className="text-[11px] font-semibold text-[#0D8BE0] hover:underline cursor-pointer inline-flex items-center gap-1">
-                        <span>View file</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#06395F]/60 italic p-3 bg-slate-50 rounded-[9px]">
+                    No digital attachments uploaded with this initial application.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -392,14 +445,16 @@ export default function AdminProvidersPage() {
                   <button
                     type="button"
                     onClick={() => handleOpenReject(inspecting)}
-                    className="px-4 py-2 rounded-[11px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition"
+                    disabled={actionLoading}
+                    className="px-4 py-2 rounded-[11px] border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition disabled:opacity-50"
                   >
                     Reject
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApprove(inspecting)}
-                    className="px-4 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition"
+                    disabled={actionLoading}
+                    className="px-4 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition disabled:opacity-50"
                   >
                     Approve practice
                   </button>
@@ -450,9 +505,10 @@ export default function AdminProvidersPage() {
               <button
                 type="button"
                 onClick={confirmReject}
-                className="px-4 py-2 rounded-[11px] bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-[11px] bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 disabled:opacity-50"
               >
-                Confirm rejection
+                {actionLoading ? "Rejecting..." : "Confirm rejection"}
               </button>
             </div>
           </div>
