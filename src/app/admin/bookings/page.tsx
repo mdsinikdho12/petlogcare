@@ -1,7 +1,7 @@
 // src/app/admin/bookings/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   CalendarCheck2,
   Search,
@@ -16,9 +16,11 @@ import {
   DollarSign,
   ShieldAlert,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
 
 interface AdminBooking {
   id: string;
@@ -35,118 +37,99 @@ interface AdminBooking {
   providerNotes?: string;
 }
 
-const mockBookings: AdminBooking[] = [
-  {
-    id: "bk-901",
-    patientName: "Milo",
-    petSpecies: "Golden Retriever",
-    ownerName: "MD Ferdous Ahmed",
-    clinicName: "CareVet Animal Hospital & Surgery",
-    serviceTitle: "Comprehensive Clinical Veterinary Consultation",
-    dateTime: "Tomorrow, 10:30 AM",
-    totalBDT: 800,
-    depositPaidBDT: 80,
-    status: "CONFIRMED",
-  },
-  {
-    id: "bk-892",
-    patientName: "Luna",
-    petSpecies: "Persian Cat",
-    ownerName: "Nusrat Jahan",
-    clinicName: "Paws & Claws Veterinary Care",
-    serviceTitle: "Emergency Trauma & X-Ray Examination",
-    dateTime: "14 Nov, 03:00 PM",
-    totalBDT: 3200,
-    depositPaidBDT: 320,
-    status: "DISPUTED",
-    disputeReason: "Attending doctor was absent during scheduled trauma window; had to visit another emergency hospital.",
-    providerNotes: "Duty veterinarian was scrubbed in an emergency caesarean section. Offered 45-min rescheduled slot.",
-  },
-  {
-    id: "bk-885",
-    patientName: "Rocky",
-    petSpecies: "German Shepherd",
-    ownerName: "Tanzir Hossain",
-    clinicName: "Uttara Pet Wellness Center",
-    serviceTitle: "Core Rabies & Annual Vaccine Administration",
-    dateTime: "12 Nov, 11:00 AM",
-    totalBDT: 1200,
-    depositPaidBDT: 120,
-    status: "COMPLETED",
-  },
-  {
-    id: "bk-870",
-    patientName: "Simba",
-    petSpecies: "Domestic Cat",
-    ownerName: "Arif Karim",
-    clinicName: "Fluffy Tails Grooming & Boarding Resort",
-    serviceTitle: "Full Hygienic Pet Grooming & Medicated Bath",
-    dateTime: "09 Nov, 02:30 PM",
-    totalBDT: 1800,
-    depositPaidBDT: 180,
-    status: "DISPUTED",
-    disputeReason: "Cat sustained skin abrasion during grooming; requested refund of service deposit.",
-    providerNotes: "Severe matted fur caused skin irritation prior to grooming. First aid ointment was applied.",
-  },
-  {
-    id: "bk-861",
-    patientName: "Coco",
-    petSpecies: "Beagle",
-    ownerName: "Rifat Hasan",
-    clinicName: "Mirpur Central Pet Clinic",
-    serviceTitle: "Dental Prophylaxis & Scaling",
-    dateTime: "05 Nov, 04:00 PM",
-    totalBDT: 2500,
-    depositPaidBDT: 250,
-    status: "REFUNDED",
-  },
-];
-
 export default function AdminBookingsPage() {
-  const [bookings, setBookings] = useState<AdminBooking[]>(mockBookings);
+  const [bookings, setBookings] = useState<AdminBooking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
   // Dispute resolution modal
   const [resolvingBooking, setResolvingBooking] = useState<AdminBooking | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const filtered = bookings.filter((b) => {
-    const matchesStatus = statusFilter === "ALL" || b.status === statusFilter;
-    const matchesSearch =
-      b.patientName.toLowerCase().includes(search.toLowerCase()) ||
-      b.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-      b.clinicName.toLowerCase().includes(search.toLowerCase()) ||
-      b.id.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const fetchBookings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params: Record<string, string> = {};
+      if (statusFilter !== "ALL") params.status = statusFilter;
+      if (search.trim()) params.searchTerm = search.trim();
 
-  const handleResolveDispute = (decision: "PROVIDER" | "OWNER") => {
+      const res = await apiClient.get("/bookings/admin", { params });
+      const data = res.data?.data || res.data || [];
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data.bookings)
+        ? data.bookings
+        : [];
+
+      setBookings(
+        list.map((b: any) => ({
+          id: b.bookingId || b.id || b._id,
+          patientName: b.pet?.name || b.patientName || "Companion Pet",
+          petSpecies: b.pet?.species || b.petSpecies || "Pet",
+          ownerName: b.user?.name || b.ownerName || "Pet Parent",
+          clinicName: b.provider?.businessName || b.clinicName || "Veterinary Practice",
+          serviceTitle: b.service?.title || b.serviceTitle || "Clinical Consultation",
+          dateTime: b.appointmentDate
+            ? `${new Date(b.appointmentDate).toLocaleDateString("en-BD", {
+                day: "numeric",
+                month: "short",
+              })}, ${b.appointmentTime || "10:00 AM"}`
+            : b.dateTime || "Scheduled",
+          totalBDT: b.totalAmount || b.totalBDT || 0,
+          depositPaidBDT: b.depositAmount || b.depositPaidBDT || Math.round((b.totalAmount || 0) * 0.1),
+          status: b.status || "CONFIRMED",
+          disputeReason: b.disputeReason || b.complaint,
+          providerNotes: b.providerNotes || b.notes,
+        }))
+      );
+    } catch (err: any) {
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchBookings();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [fetchBookings]);
+
+  const handleResolveDispute = async (decision: "PROVIDER" | "OWNER") => {
     if (!resolvingBooking) return;
 
-    if (decision === "PROVIDER") {
+    try {
+      setActionLoading(true);
+      await apiClient.patch(`/bookings/admin/${resolvingBooking.id}/resolve-dispute`, {
+        decision: decision === "PROVIDER" ? "PROVIDER_FAVOR" : "REFUND_OWNER",
+        refundAmount: decision === "OWNER" ? resolvingBooking.depositPaidBDT : 0,
+      });
+
       setBookings((prev) =>
         prev.map((item) =>
           item.id === resolvingBooking.id
-            ? { ...item, status: "COMPLETED" }
+            ? { ...item, status: decision === "PROVIDER" ? "COMPLETED" : "REFUNDED" }
             : item
         )
       );
-      toast.success(
-        `Dispute on ${resolvingBooking.id} resolved in favor of clinic provider. Payout finalized.`
-      );
-    } else {
-      setBookings((prev) =>
-        prev.map((item) =>
-          item.id === resolvingBooking.id
-            ? { ...item, status: "REFUNDED" }
-            : item
-        )
-      );
-      toast.success(
-        `Dispute on ${resolvingBooking.id} resolved in favor of pet parent. Refund of ৳ ${resolvingBooking.depositPaidBDT} initiated.`
-      );
+
+      if (decision === "PROVIDER") {
+        toast.success(
+          `Dispute on ${resolvingBooking.id} resolved in favor of clinic provider. Payout finalized.`
+        );
+      } else {
+        toast.success(
+          `Dispute on ${resolvingBooking.id} resolved in favor of pet parent. Refund of ৳ ${resolvingBooking.depositPaidBDT} initiated.`
+        );
+      }
+      setResolvingBooking(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to resolve dispute");
+    } finally {
+      setActionLoading(false);
     }
-    setResolvingBooking(null);
   };
 
   return (
@@ -162,11 +145,22 @@ export default function AdminBookingsPage() {
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[11px] bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold">
-          <AlertTriangle className="w-4 h-4 text-rose-600" />
-          <span>
-            {bookings.filter((b) => b.status === "DISPUTED").length} open disputes
-          </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchBookings}
+            disabled={loading}
+            className="p-2 rounded-[11px] border border-[#06395F]/15 bg-white text-[#06395F] hover:bg-slate-50 transition"
+            aria-label="Refresh bookings"
+          >
+            <RefreshCw className={`w-4 h-4 text-[#0D8BE0] ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-[11px] bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold">
+            <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <span>
+              {bookings.filter((b) => b.status === "DISPUTED").length} open disputes
+            </span>
+          </div>
         </div>
       </div>
 
@@ -211,102 +205,119 @@ export default function AdminBookingsPage() {
 
       {/* Bookings Table */}
       <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 shadow-[0_1px_2px_rgba(6,57,95,0.06)] overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs text-[#06395F]">
-            <thead className="bg-[#F8FBFE] border-b border-[#06395F]/10 text-[11px] font-semibold text-[#06395F]/70 uppercase tracking-wider">
-              <tr>
-                <th className="px-5 py-3.5">Booking ID & Date</th>
-                <th className="px-5 py-3.5">Patient & Parent</th>
-                <th className="px-5 py-3.5">Clinic & Service</th>
-                <th className="px-5 py-3.5">Amount (BDT)</th>
-                <th className="px-5 py-3.5">Status</th>
-                <th className="px-5 py-3.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#06395F]/8">
-              {filtered.map((b) => (
-                <tr key={b.id} className="hover:bg-sky-50/40 transition">
-                  <td className="px-5 py-3.5">
-                    <p className="font-mono font-bold text-xs text-[#06395F]">{b.id}</p>
-                    <p className="text-[11px] text-[#06395F]/70">{b.dateTime}</p>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <p className="font-semibold text-[13px] text-[#06395F]">
-                      {b.patientName} <span className="text-[11px] font-normal text-[#06395F]/70">({b.petSpecies})</span>
-                    </p>
-                    <p className="text-[11px] text-[#06395F]/70">{b.ownerName}</p>
-                  </td>
-                  <td className="px-5 py-3.5 max-w-xs">
-                    <p className="font-semibold text-xs text-[#06395F] truncate">{b.clinicName}</p>
-                    <p className="text-[11px] text-[#06395F]/70 truncate">{b.serviceTitle}</p>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <p className="font-bold text-xs text-[#06395F]">
-                      ৳ {new Intl.NumberFormat("en-BD").format(b.totalBDT)}
-                    </p>
-                    <p className="text-[10px] text-[#06395F]/60">
-                      Paid deposit: ৳ {b.depositPaidBDT}
-                    </p>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {b.status === "CONFIRMED" ? (
-                      <StatusBadge status="CONFIRMED" />
-                    ) : b.status === "COMPLETED" ? (
-                      <StatusBadge status="COMPLETED" />
-                    ) : b.status === "DISPUTED" ? (
-                      <StatusBadge status="CANCELLED" label="Disputed" />
-                    ) : (
-                      <StatusBadge status={b.status} />
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {b.status === "DISPUTED" ? (
-                      <button
-                        type="button"
-                        onClick={() => setResolvingBooking(b)}
-                        className="px-3 py-1.5 rounded-[9px] bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700 transition shadow-2xs inline-flex items-center gap-1"
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                        <span>Resolve dispute</span>
-                      </button>
-                    ) : (
-                      <span className="text-[11px] text-[#06395F]/60">Settled</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile View */}
-        <div className="block md:hidden divide-y divide-[#06395F]/10">
-          {filtered.map((b) => (
-            <div key={b.id} className="p-4 space-y-2.5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="font-mono font-bold text-xs">{b.id}</span>
-                  <h4 className="font-bold text-sm text-[#06395F]">{b.patientName} ({b.ownerName})</h4>
-                  <p className="text-xs text-[#06395F]/70">{b.clinicName}</p>
-                </div>
-                <span className="font-bold text-xs">৳ {b.totalBDT}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-[#06395F]/75">
-                <span>{b.dateTime}</span>
-                <span className="font-semibold">{b.status}</span>
-              </div>
-              {b.status === "DISPUTED" && (
-                <button
-                  type="button"
-                  onClick={() => setResolvingBooking(b)}
-                  className="w-full py-2 rounded-[9px] bg-rose-600 text-white text-xs font-semibold"
-                >
-                  Resolve dispute
-                </button>
-              )}
+        {loading ? (
+          <div className="p-12 text-center space-y-3">
+            <RefreshCw className="w-6 h-6 text-[#0D8BE0] animate-spin mx-auto" />
+            <p className="text-xs text-[#06395F]/70 font-medium">Fetching appointment records...</p>
+          </div>
+        ) : bookings.length === 0 ? (
+          <div className="p-12 text-center space-y-2">
+            <CalendarCheck2 className="w-10 h-10 text-[#06395F]/30 mx-auto" />
+            <h3 className="font-bold text-sm text-[#06395F]">No appointments found</h3>
+            <p className="text-xs text-[#06395F]/70 max-w-sm mx-auto">
+              There are currently no bookings matching your criteria in this ledger.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs text-[#06395F]">
+                <thead className="bg-[#F8FBFE] border-b border-[#06395F]/10 text-[11px] font-semibold text-[#06395F]/70 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3.5">Booking ID & Date</th>
+                    <th className="px-5 py-3.5">Patient & Parent</th>
+                    <th className="px-5 py-3.5">Clinic & Service</th>
+                    <th className="px-5 py-3.5">Amount (BDT)</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#06395F]/8">
+                  {bookings.map((b) => (
+                    <tr key={b.id} className="hover:bg-sky-50/40 transition">
+                      <td className="px-5 py-3.5">
+                        <p className="font-mono font-bold text-xs text-[#06395F]">{b.id}</p>
+                        <p className="text-[11px] text-[#06395F]/70">{b.dateTime}</p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="font-semibold text-[13px] text-[#06395F]">
+                          {b.patientName} <span className="text-[11px] font-normal text-[#06395F]/70">({b.petSpecies})</span>
+                        </p>
+                        <p className="text-[11px] text-[#06395F]/70">{b.ownerName}</p>
+                      </td>
+                      <td className="px-5 py-3.5 max-w-xs">
+                        <p className="font-semibold text-xs text-[#06395F] truncate">{b.clinicName}</p>
+                        <p className="text-[11px] text-[#06395F]/70 truncate">{b.serviceTitle}</p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="font-bold text-xs text-[#06395F]">
+                          ৳ {new Intl.NumberFormat("en-BD").format(b.totalBDT)}
+                        </p>
+                        <p className="text-[10px] text-[#06395F]/60">
+                          Paid deposit: ৳ {b.depositPaidBDT}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {b.status === "CONFIRMED" ? (
+                          <StatusBadge status="CONFIRMED" />
+                        ) : b.status === "COMPLETED" ? (
+                          <StatusBadge status="COMPLETED" />
+                        ) : b.status === "DISPUTED" ? (
+                          <StatusBadge status="CANCELLED" label="Disputed" />
+                        ) : (
+                          <StatusBadge status={b.status} />
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        {b.status === "DISPUTED" ? (
+                          <button
+                            type="button"
+                            onClick={() => setResolvingBooking(b)}
+                            className="px-3 py-1.5 rounded-[9px] bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700 transition shadow-2xs inline-flex items-center gap-1"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            <span>Resolve dispute</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-[#06395F]/60">Settled</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+
+            {/* Mobile View */}
+            <div className="block md:hidden divide-y divide-[#06395F]/10">
+              {bookings.map((b) => (
+                <div key={b.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="font-mono font-bold text-xs">{b.id}</span>
+                      <h4 className="font-bold text-sm text-[#06395F]">{b.patientName} ({b.ownerName})</h4>
+                      <p className="text-xs text-[#06395F]/70">{b.clinicName}</p>
+                    </div>
+                    <span className="font-bold text-xs">৳ {b.totalBDT}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-[#06395F]/75">
+                    <span>{b.dateTime}</span>
+                    <span className="font-semibold">{b.status}</span>
+                  </div>
+                  {b.status === "DISPUTED" && (
+                    <button
+                      type="button"
+                      onClick={() => setResolvingBooking(b)}
+                      className="w-full py-2 rounded-[9px] bg-rose-600 text-white text-xs font-semibold"
+                    >
+                      Resolve dispute
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Dispute Resolution Modal */}
@@ -343,7 +354,7 @@ export default function AdminBookingsPage() {
                   <span>Pet Parent Complaint ({resolvingBooking.ownerName}):</span>
                 </p>
                 <p className="text-rose-950 leading-relaxed font-normal">
-                  {resolvingBooking.disputeReason}
+                  {resolvingBooking.disputeReason || "No written statement submitted by client."}
                 </p>
               </div>
 
@@ -353,13 +364,13 @@ export default function AdminBookingsPage() {
                   <span>Clinic Statement ({resolvingBooking.clinicName}):</span>
                 </p>
                 <p className="text-[#06395F]/85 leading-relaxed font-normal">
-                  {resolvingBooking.providerNotes}
+                  {resolvingBooking.providerNotes || "No incident notes logged by practice."}
                 </p>
               </div>
 
               <div className="p-3 rounded-[11px] bg-slate-50 border border-slate-200/60 text-[11px] text-[#06395F]/80">
                 <p className="font-semibold text-[#06395F] mb-1">Financial Settlement Rules:</p>
-                <p>• If Owner wins: Deposit of <strong>৳ {resolvingBooking.depositPaidBDT}</strong> is refunded to user MFS (bKash/Nagad).</p>
+                <p>• If Owner wins: Deposit of <strong>৳ {resolvingBooking.depositPaidBDT}</strong> is refunded to user MFS.</p>
                 <p>• If Provider wins: <strong>৳ {resolvingBooking.depositPaidBDT - Math.round(resolvingBooking.depositPaidBDT * 0.1)}</strong> is released to provider wallet.</p>
               </div>
             </div>
@@ -377,14 +388,16 @@ export default function AdminBookingsPage() {
                 <button
                   type="button"
                   onClick={() => handleResolveDispute("PROVIDER")}
-                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-[11px] border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-semibold hover:bg-emerald-100 transition"
+                  disabled={actionLoading}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-[11px] border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-semibold hover:bg-emerald-100 transition disabled:opacity-50"
                 >
                   Provider wins
                 </button>
                 <button
                   type="button"
                   onClick={() => handleResolveDispute("OWNER")}
-                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-[11px] bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition"
+                  disabled={actionLoading}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-[11px] bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition disabled:opacity-50"
                 >
                   Owner wins (Refund ৳{resolvingBooking.depositPaidBDT})
                 </button>

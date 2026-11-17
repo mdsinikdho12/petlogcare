@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   MapPin,
@@ -21,10 +21,12 @@ import {
   User,
   Award,
   Layers,
+  RotateCw,
 } from "lucide-react";
 import { CalBookingModal } from "@/components/modules/booking/CalBookingModal";
 import { toast } from "sonner";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
 
 interface ProviderData {
   id: string;
@@ -271,7 +273,121 @@ function formatBDT(amount: number): string {
 }
 
 export default function ProviderProfileContent({ id }: { id: string }) {
-  const clinic = CLINICS_DATA[id] || CLINICS_DATA["carevet-dhanmondi"];
+  const [clinic, setClinic] = useState<ProviderData>(
+    () => CLINICS_DATA[id] || CLINICS_DATA["carevet-dhanmondi"]
+  );
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (/^[0-9a-fA-F]{24}$/.test(id)) {
+      setLoading(true);
+      apiClient
+        .get(`/providers/${id}`)
+        .then((res) => {
+          const p = res.data?.data;
+          if (p && isMounted) {
+            setClinic({
+              id: p._id || p.id,
+              name: p.businessName || "Veterinary Practice",
+              verified: p.verified ?? true,
+              rating: typeof p.rating === "number" ? p.rating : 4.9,
+              reviewCount: typeof p.reviewCount === "number" ? p.reviewCount : 1,
+              phone: p.phone || "+880 1700-000000",
+              address: `${p.address?.street ? p.address.street + ", " : ""}${
+                p.address?.area || ""
+              }, ${p.address?.city || p.address?.district || "Dhaka"}`,
+              district: p.address?.district || "Dhaka",
+              bio:
+                p.bio ||
+                "Certified veterinary clinic providing comprehensive pet healthcare, surgery, and preventative wellness.",
+              coverImage:
+                p.cover?.url ||
+                p.logo?.url ||
+                p.coverImage ||
+                "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&w=1200&q=80",
+              highlightBadge:
+                p.highlightBadge ||
+                (p.serviceModes?.includes("HOME_VISIT")
+                  ? "Home visits available"
+                  : "Verified partner clinic"),
+              doctors:
+                p.doctors && p.doctors.length > 0
+                  ? p.doctors
+                  : [
+                      {
+                        name: "Dr. Consultant Veterinarian",
+                        qualification: "DVM, Registered Practitioner",
+                        role: "Chief Attending Vet",
+                        experience: "8+ years experience",
+                      },
+                    ],
+              amenities:
+                p.amenities && p.amenities.length > 0
+                  ? p.amenities
+                  : [
+                      "Ultrasonic diagnostic equipment",
+                      "Digital patient history via PetCareLog",
+                      "Vaccination passport synchronization",
+                      "bKash, Nagad & card payments accepted",
+                    ],
+              services:
+                Array.isArray(p.services) && p.services.length > 0
+                  ? p.services.map((s: any) => ({
+                      id: s._id || s.id,
+                      title: s.title || s.name || "Veterinary Service",
+                      category: s.category || "General care",
+                      duration: `${s.durationMinutes || 30} mins`,
+                      priceBDT: s.priceBDT || 800,
+                      description:
+                        s.description ||
+                        "Comprehensive veterinary healthcare service.",
+                    }))
+                  : [
+                      {
+                        id: "s-1",
+                        title: "General Veterinary Consultation",
+                        category: "Consultation",
+                        duration: "30 mins",
+                        priceBDT: 800,
+                        description:
+                          "Complete physical exam, vitals evaluation, and medical prescription.",
+                      },
+                    ],
+              hours:
+                p.operatingHours && p.operatingHours.length > 0
+                  ? p.operatingHours.map((h: any) => ({
+                      day: h.day,
+                      time: `${h.openTime || "09:00 AM"} - ${h.closeTime || "09:00 PM"}`,
+                      open: !h.isClosed,
+                    }))
+                  : [
+                      {
+                        day: "Saturday - Thursday",
+                        time: "09:00 AM - 09:00 PM",
+                        open: true,
+                      },
+                      {
+                        day: "Friday",
+                        time: "03:00 PM - 09:00 PM",
+                        open: true,
+                      },
+                    ],
+              reviews: p.reviews || [],
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not fetch provider from API:", err);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   const [activeTab, setActiveTab] = useState<
     "services" | "about" | "doctors" | "reviews"
@@ -309,6 +425,7 @@ export default function ProviderProfileContent({ id }: { id: string }) {
         {/* Hero Visual Cover Banner */}
         <div className="rounded-[13px] overflow-hidden border border-white/80 bg-white/70 shadow-[0_8px_30px_rgba(1,95,160,0.10),inset_0_1px_0_rgba(255,255,255,0.95)]">
           <div className="relative h-60 sm:h-72 lg:h-80 w-full overflow-hidden bg-slate-200">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={clinic.coverImage}
               alt={clinic.name}

@@ -1,7 +1,7 @@
 // src/app/admin/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -18,6 +18,7 @@ import {
   Clock,
   Sparkles,
   DollarSign,
+  RefreshCw,
 } from "lucide-react";
 import {
   AreaChart,
@@ -30,39 +31,102 @@ import {
 } from "recharts";
 import StatCard from "@/components/dashboard/StatCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
 
-const revenueTrends = [
-  { day: "01 Nov", gmv: 14200, fee: 1420 },
-  { day: "03 Nov", gmv: 18500, fee: 1850 },
-  { day: "05 Nov", gmv: 16800, fee: 1680 },
-  { day: "07 Nov", gmv: 22400, fee: 2240 },
-  { day: "09 Nov", gmv: 19800, fee: 1980 },
-  { day: "11 Nov", gmv: 25600, fee: 2560 },
-  { day: "13 Nov", gmv: 28900, fee: 2890 },
-  { day: "15 Nov", gmv: 31200, fee: 3120 },
-];
+interface OverviewMetrics {
+  totalGmv: number;
+  platformRevenue: number;
+  netOnlineCollected: number;
+  activePetOwners: number;
+  verifiedProviders: number;
+  completedAppointments: number;
+  pendingVerifications: number;
+  openDisputes: number;
+  reportedReviews: number;
+  pendingPayoutsAmount: number;
+}
 
-const bookingsTrends = [
-  { day: "01 Nov", created: 28, completed: 25 },
-  { day: "03 Nov", created: 35, completed: 31 },
-  { day: "05 Nov", created: 30, completed: 28 },
-  { day: "07 Nov", created: 42, completed: 39 },
-  { day: "09 Nov", created: 38, completed: 36 },
-  { day: "11 Nov", created: 46, completed: 41 },
-  { day: "13 Nov", created: 52, completed: 48 },
-  { day: "15 Nov", created: 58, completed: 53 },
-];
-
-const userTrends = [
-  { day: "01 Nov", owners: 1240, providers: 74 },
-  { day: "05 Nov", owners: 1290, providers: 77 },
-  { day: "09 Nov", owners: 1345, providers: 81 },
-  { day: "13 Nov", owners: 1390, providers: 84 },
-  { day: "15 Nov", owners: 1420, providers: 86 },
-];
+interface TrendPoint {
+  day: string;
+  gmv?: number;
+  fee?: number;
+  created?: number;
+  completed?: number;
+  owners?: number;
+  providers?: number;
+}
 
 export default function AdminOverviewPage() {
+  const [loading, setLoading] = useState(true);
   const [trendTab, setTrendTab] = useState<"revenue" | "bookings" | "users">("revenue");
+  const [metrics, setMetrics] = useState<OverviewMetrics>({
+    totalGmv: 0,
+    platformRevenue: 0,
+    netOnlineCollected: 0,
+    activePetOwners: 0,
+    verifiedProviders: 0,
+    completedAppointments: 0,
+    pendingVerifications: 0,
+    openDisputes: 0,
+    reportedReviews: 0,
+    pendingPayoutsAmount: 0,
+  });
+
+  const [trends, setTrends] = useState<{
+    revenue: TrendPoint[];
+    bookings: TrendPoint[];
+    users: TrendPoint[];
+  }>({
+    revenue: [],
+    bookings: [],
+    users: [],
+  });
+
+  const fetchOverviewData = async () => {
+    try {
+      setLoading(true);
+      const [overviewRes, trendsRes] = await Promise.allSettled([
+        apiClient.get("/admin/dashboard/overview"),
+        apiClient.get("/admin/dashboard/trends"),
+      ]);
+
+      if (overviewRes.status === "fulfilled") {
+        const d = overviewRes.value.data?.data || overviewRes.value.data || {};
+        setMetrics({
+          totalGmv: d.totalGmv || d.gmv || 0,
+          platformRevenue: d.platformRevenue || d.revenue || 0,
+          netOnlineCollected: d.netOnlineCollected || d.onlineCollected || 0,
+          activePetOwners: d.activePetOwners || d.petOwnersCount || d.usersCount || 0,
+          verifiedProviders: d.verifiedProviders || d.providersCount || 0,
+          completedAppointments: d.completedAppointments || d.bookingsCompleted || 0,
+          pendingVerifications: d.pendingVerifications || d.pendingProvidersCount || 0,
+          openDisputes: d.openDisputes || d.disputesCount || 0,
+          reportedReviews: d.reportedReviews || d.reviewsReportedCount || 0,
+          pendingPayoutsAmount: d.pendingPayoutsAmount || d.payoutsQueued || 0,
+        });
+      }
+
+      if (trendsRes.status === "fulfilled") {
+        const t = trendsRes.value.data?.data || trendsRes.value.data || {};
+        setTrends({
+          revenue: Array.isArray(t.revenue) ? t.revenue : [],
+          bookings: Array.isArray(t.bookings) ? t.bookings : [],
+          users: Array.isArray(t.users) ? t.users : [],
+        });
+      }
+    } catch (err) {
+      // In case of unauthenticated or network error, metrics remain 0
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOverviewData();
+  }, []);
+
+  const formatBDT = (amount: number) =>
+    `৳ ${new Intl.NumberFormat("en-BD").format(amount)}`;
 
   return (
     <div className="space-y-6">
@@ -72,36 +136,38 @@ export default function AdminOverviewPage() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[8px] bg-indigo-50 text-indigo-700 text-[12px] font-semibold border border-indigo-200/60 shadow-xs">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Super administrative control center</span>
+              <span>Administrative Operations Console</span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#06395F]">
-              Platform operations & health
+              Platform overview & health
             </h1>
             <p className="text-[13px] sm:text-sm text-[#06395F]/80 max-w-2xl leading-relaxed font-normal">
-              PetCareLog operations in Dhaka and Chittagong. Monitor real-time GMV, online MFS escrow, provider verifications, and compliance logs.
+              Real-time GMV, online MFS escrow, provider verifications, and compliance monitoring across Bangladesh.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/admin/providers"
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-[13px] font-semibold shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 transition"
+            <button
+              type="button"
+              onClick={fetchOverviewData}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 bg-white text-[#06395F] text-[12px] font-semibold hover:bg-slate-50 transition shadow-2xs disabled:opacity-50"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Review 4 pending providers</span>
-            </Link>
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0D8BE0] ${loading ? "animate-spin" : ""}`} />
+              <span>Refresh data</span>
+            </button>
             <Link
               href="/admin/audit-logs"
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-[11px] border border-[#06395F]/15 bg-white text-[#06395F] text-[13px] font-semibold hover:bg-slate-50 transition shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-[12px] font-semibold shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 transition"
             >
-              <Activity className="w-4 h-4 text-[#0D8BE0]" />
+              <Activity className="w-3.5 h-3.5" />
               <span>Audit trail</span>
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Attention Strip: Urgent queues requiring action */}
+      {/* Attention Strip: Real queues requiring action */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Link
           href="/admin/providers"
@@ -113,7 +179,9 @@ export default function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-[11px] font-medium text-amber-900/80">Verification queue</p>
-              <p className="text-[13px] font-bold text-amber-950">4 practices pending</p>
+              <p className="text-[13px] font-bold text-amber-950">
+                {metrics.pendingVerifications} practices pending
+              </p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-amber-800 group-hover:translate-x-0.5 transition-transform" />
@@ -129,7 +197,9 @@ export default function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-[11px] font-medium text-rose-900/80">Active disputes</p>
-              <p className="text-[13px] font-bold text-rose-950">2 cases need resolution</p>
+              <p className="text-[13px] font-bold text-rose-950">
+                {metrics.openDisputes} cases open
+              </p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-rose-800 group-hover:translate-x-0.5 transition-transform" />
@@ -145,7 +215,9 @@ export default function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-[11px] font-medium text-indigo-900/80">Review moderation</p>
-              <p className="text-[13px] font-bold text-indigo-950">3 reported reviews</p>
+              <p className="text-[13px] font-bold text-indigo-950">
+                {metrics.reportedReviews} reported reviews
+              </p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-indigo-800 group-hover:translate-x-0.5 transition-transform" />
@@ -161,7 +233,9 @@ export default function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-[11px] font-medium text-emerald-900/80">Payout batches</p>
-              <p className="text-[13px] font-bold text-emerald-950">৳ 42,500 queued</p>
+              <p className="text-[13px] font-bold text-emerald-950">
+                {formatBDT(metrics.pendingPayoutsAmount)} queued
+              </p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-emerald-800 group-hover:translate-x-0.5 transition-transform" />
@@ -174,8 +248,8 @@ export default function AdminOverviewPage() {
           icon={TrendingUp}
           tint="emerald"
           title="Total GMV (30 days)"
-          value="৳ 485,000"
-          badge={<StatusBadge status="ACTIVE" label="+18% vs Oct" />}
+          value={loading ? "..." : formatBDT(metrics.totalGmv)}
+          badge={<StatusBadge status="ACTIVE" label="Platform GMV" />}
           href="/admin/bookings"
         />
 
@@ -183,7 +257,7 @@ export default function AdminOverviewPage() {
           icon={DollarSign}
           tint="sky"
           title="Platform revenue earned"
-          value="৳ 48,500"
+          value={loading ? "..." : formatBDT(metrics.platformRevenue)}
           badge={<StatusBadge status="INFO" label="10% booking fee" />}
           href="/admin/payouts"
         />
@@ -192,8 +266,8 @@ export default function AdminOverviewPage() {
           icon={Users}
           tint="indigo"
           title="Active pet owners"
-          value="1,420"
-          badge={<StatusBadge status="ACTIVE" label="98.2% active" />}
+          value={loading ? "..." : new Intl.NumberFormat("en-BD").format(metrics.activePetOwners)}
+          badge={<StatusBadge status="ACTIVE" label="Registered parents" />}
           href="/admin/users"
         />
 
@@ -201,13 +275,13 @@ export default function AdminOverviewPage() {
           icon={CalendarCheck2}
           tint="emerald"
           title="Completed appointments"
-          value="942"
-          badge={<StatusBadge status="COMPLETED" label="94% satisfaction" />}
+          value={loading ? "..." : new Intl.NumberFormat("en-BD").format(metrics.completedAppointments)}
+          badge={<StatusBadge status="COMPLETED" label="Settled visits" />}
           href="/admin/bookings"
         />
       </div>
 
-      {/* Main Trends Visualizer & Recent Administrative Events */}
+      {/* Main Trends Visualizer & Gateway Status */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left 8 Cols: Analytics Area Chart */}
         <div className="lg:col-span-8 rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 sm:p-6 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4">
@@ -217,7 +291,7 @@ export default function AdminOverviewPage() {
                 Operational performance trends
               </h2>
               <p className="text-[12px] text-[#06395F]/70 font-normal">
-                Aggregated daily volume bucketed in Asia/Dhaka timezone.
+                Daily metrics bucketed in Asia/Dhaka calendar time.
               </p>
             </div>
 
@@ -259,105 +333,117 @@ export default function AdminOverviewPage() {
           </div>
 
           <div className="h-[280px] w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              {trendTab === "revenue" ? (
-                <AreaChart data={revenueTrends}>
-                  <defs>
-                    <linearGradient id="gmvGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0D8BE0" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#0D8BE0" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
-                  <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
-                  <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} tickFormatter={(v) => `৳${v / 1000}k`} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(255, 255, 255, 0.95)",
-                      borderRadius: "11px",
-                      border: "1px solid rgba(6, 57, 95, 0.12)",
-                      boxShadow: "0 8px 24px rgba(1, 95, 160, 0.12)",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "#06395F",
-                    }}
-                    formatter={(val: any) => [`৳ ${new Intl.NumberFormat("en-BD").format(Number(val) || 0)}`, "GMV"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="gmv"
-                    stroke="#0D8BE0"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#gmvGrad)"
-                  />
-                </AreaChart>
-              ) : trendTab === "bookings" ? (
-                <AreaChart data={bookingsTrends}>
-                  <defs>
-                    <linearGradient id="bkGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
-                  <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
-                  <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(255, 255, 255, 0.95)",
-                      borderRadius: "11px",
-                      border: "1px solid rgba(6, 57, 95, 0.12)",
-                      fontSize: "12px",
-                      color: "#06395F",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="completed"
-                    name="Completed"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#bkGrad)"
-                  />
-                </AreaChart>
-              ) : (
-                <AreaChart data={userTrends}>
-                  <defs>
-                    <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366F1" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
-                  <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
-                  <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(255, 255, 255, 0.95)",
-                      borderRadius: "11px",
-                      border: "1px solid rgba(6, 57, 95, 0.12)",
-                      fontSize: "12px",
-                      color: "#06395F",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="owners"
-                    name="Pet Owners"
-                    stroke="#6366F1"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#userGrad)"
-                  />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
+            {trends[trendTab].length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                {trendTab === "revenue" ? (
+                  <AreaChart data={trends.revenue}>
+                    <defs>
+                      <linearGradient id="gmvGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0D8BE0" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#0D8BE0" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
+                    <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
+                    <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} tickFormatter={(v) => `৳${v / 1000}k`} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255, 255, 255, 0.95)",
+                        borderRadius: "11px",
+                        border: "1px solid rgba(6, 57, 95, 0.12)",
+                        boxShadow: "0 8px 24px rgba(1, 95, 160, 0.12)",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "#06395F",
+                      }}
+                      formatter={(val: any) => [`৳ ${new Intl.NumberFormat("en-BD").format(Number(val) || 0)}`, "GMV"]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="gmv"
+                      stroke="#0D8BE0"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#gmvGrad)"
+                    />
+                  </AreaChart>
+                ) : trendTab === "bookings" ? (
+                  <AreaChart data={trends.bookings}>
+                    <defs>
+                      <linearGradient id="bkGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
+                    <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
+                    <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255, 255, 255, 0.95)",
+                        borderRadius: "11px",
+                        border: "1px solid rgba(6, 57, 95, 0.12)",
+                        fontSize: "12px",
+                        color: "#06395F",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="completed"
+                      name="Completed"
+                      stroke="#10B981"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#bkGrad)"
+                    />
+                  </AreaChart>
+                ) : (
+                  <AreaChart data={trends.users}>
+                    <defs>
+                      <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366F1" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#06395F" strokeOpacity={0.06} />
+                    <XAxis dataKey="day" stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
+                    <YAxis stroke="#06395F" opacity={0.6} fontSize={11} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255, 255, 255, 0.95)",
+                        borderRadius: "11px",
+                        border: "1px solid rgba(6, 57, 95, 0.12)",
+                        fontSize: "12px",
+                        color: "#06395F",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="owners"
+                      name="Pet Owners"
+                      stroke="#6366F1"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#userGrad)"
+                    />
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50/60 rounded-[11px] border border-dashed border-slate-200">
+                <Activity className="w-8 h-8 text-[#0D8BE0]/50 mb-2" />
+                <p className="text-xs font-semibold text-[#06395F]">
+                  No daily trend data available yet
+                </p>
+                <p className="text-[11px] text-[#06395F]/60 max-w-xs mt-0.5">
+                  Analytics will populate automatically as appointment bookings and user registrations occur on the platform.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right 4 Cols: System & Security Ledger */}
+        {/* Right 4 Cols: System Gate & Infrastructure Status */}
         <div className="lg:col-span-4 rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 sm:p-6 shadow-[0_1px_2px_rgba(6,57,95,0.06)] space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
@@ -378,7 +464,7 @@ export default function AdminOverviewPage() {
                     UddoktaPay MFS Gateway
                   </p>
                   <p className="text-[11px] text-[#06395F]/70">
-                    bKash / Nagad webhooks returning 200 OK
+                    Live production endpoint connected
                   </p>
                 </div>
               </div>
@@ -390,7 +476,7 @@ export default function AdminOverviewPage() {
                     Digital Health Vault
                   </p>
                   <p className="text-[11px] text-[#06395F]/70">
-                    Cloudinary signed access URLs expiring in 5 min
+                    Signed Cloudinary URL generation active
                   </p>
                 </div>
               </div>
@@ -399,10 +485,10 @@ export default function AdminOverviewPage() {
                 <Clock className="w-4 h-4 text-[#0D8BE0] shrink-0 mt-0.5" />
                 <div>
                   <p className="text-[12px] font-semibold text-[#06395F]">
-                    Scheduled Booster Dispatch
+                    Vaccination Booster Scheduler
                   </p>
                   <p className="text-[11px] text-[#06395F]/70">
-                    Next SMS & push trigger tomorrow at 09:00 AM
+                    Cron worker running in Asia/Dhaka
                   </p>
                 </div>
               </div>

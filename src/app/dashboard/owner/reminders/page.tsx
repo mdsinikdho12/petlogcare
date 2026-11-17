@@ -1,7 +1,6 @@
-// src/app/dashboard/owner/reminders/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Bell,
   Plus,
@@ -15,407 +14,457 @@ import {
   Trash2,
   X,
   AlertCircle,
+  RotateCw,
+  PlusCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { apiClient } from "@/lib/api/client";
 
 interface PetReminder {
   id: string;
   petName: string;
-  petSpecies: "Dog" | "Cat";
   title: string;
-  category: "Vaccination" | "Deworming" | "Medication" | "Grooming" | "Clinic visit";
   dueDate: string;
-  daysRemaining: number;
+  dueTime?: string;
   isCompleted: boolean;
   notes?: string;
-  clinicRecommendation?: string;
 }
 
-const mockReminders: PetReminder[] = [
-  {
-    id: "rem-1",
-    petName: "Milo",
-    petSpecies: "Dog",
-    title: "Rabies Multi-booster Vaccination",
-    category: "Vaccination",
-    dueDate: "04 Dec 2026",
-    daysRemaining: 18,
-    isCompleted: false,
-    clinicRecommendation: "Recommended by Central Pet Hospital (Dr. Samira Khan)",
-    notes: "Mandatory annual booster for travel and public park safety.",
-  },
-  {
-    id: "rem-2",
-    petName: "Luna",
-    petSpecies: "Cat",
-    title: "Tricat Core Feline Booster",
-    category: "Vaccination",
-    dueDate: "10 Nov 2026",
-    daysRemaining: -6,
-    isCompleted: true,
-    clinicRecommendation: "Administered by Dr. Farhan Chowdhury",
-  },
-  {
-    id: "rem-3",
-    petName: "Milo",
-    petSpecies: "Dog",
-    title: "Broad-Spectrum Deworming Tablet",
-    category: "Deworming",
-    dueDate: "21 Nov 2026",
-    daysRemaining: 5,
-    isCompleted: false,
-    notes: "Administer with morning meal (Drontal Plus 1 tab per 10kg).",
-  },
-  {
-    id: "rem-4",
-    petName: "Luna",
-    petSpecies: "Cat",
-    title: "Flea & Tick Spot-on Treatment",
-    category: "Medication",
-    dueDate: "28 Nov 2026",
-    daysRemaining: 12,
-    isCompleted: false,
-    notes: "Apply 1 pipette directly onto the skin behind neck.",
-  },
-  {
-    id: "rem-5",
-    petName: "Milo",
-    petSpecies: "Dog",
-    title: "Routine Dental Scaling Checkup",
-    category: "Clinic visit",
-    dueDate: "15 Jan 2027",
-    daysRemaining: 60,
-    isCompleted: false,
-  },
-];
-
 export default function OwnerRemindersPage() {
-  const [reminders, setReminders] = useState<PetReminder[]>(mockReminders);
-  const [petFilter, setPetFilter] = useState<string>("ALL");
-  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [reminders, setReminders] = useState<PetReminder[]>([]);
+  const [pets, setPets] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
-  // New Reminder Form
-  const [petName, setPetName] = useState("Milo");
+  // Form state
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<PetReminder["category"]>("Vaccination");
-  const [dueDate, setDueDate] = useState("");
+  const [selectedPetId, setSelectedPetId] = useState("");
+  const [dueDate, setDueDate] = useState("2026-12-05");
+  const [dueTime, setDueTime] = useState("10:00");
   const [notes, setNotes] = useState("");
 
-  const filtered = reminders.filter((r) => {
-    const matchesPet = petFilter === "ALL" || r.petName === petFilter;
-    const matchesCategory = categoryFilter === "ALL" || r.category === categoryFilter;
-    return matchesPet && matchesCategory;
-  });
+  const fetchRemindersAndPets = async () => {
+    try {
+      setLoading(true);
+      const [remRes, petsRes] = await Promise.allSettled([
+        apiClient.get("/reminders/me"),
+        apiClient.get("/pets"),
+      ]);
 
-  const handleToggleComplete = (id: string) => {
-    setReminders((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          const nextState = !r.isCompleted;
-          if (nextState) {
-            toast.success(`Marked "${r.title}" as completed!`);
-          }
-          return { ...r, isCompleted: nextState };
+      if (petsRes.status === "fulfilled" && petsRes.value.data?.data) {
+        const rawPets = petsRes.value.data.data;
+        const normalizedPets = rawPets.map((p: any) => ({
+          id: p._id || p.id,
+          name: p.name,
+        }));
+        setPets(normalizedPets);
+        if (normalizedPets.length > 0 && !selectedPetId) {
+          setSelectedPetId(normalizedPets[0].id);
         }
-        return r;
-      })
-    );
+      }
+
+      if (remRes.status === "fulfilled" && remRes.value.data?.data) {
+        const raw = remRes.value.data.data;
+        if (Array.isArray(raw)) {
+          const mapped: PetReminder[] = raw.map((r: any) => ({
+            id: r._id || r.id,
+            petName: r.pet?.name || "Companion Pet",
+            title: r.title,
+            dueDate: r.dueDate || "2026-12-01",
+            dueTime: r.dueTime || "09:00",
+            isCompleted: r.status === "DONE" || r.isCompleted || false,
+            notes: r.notes,
+          }));
+          setReminders(mapped);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load reminders from API:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSnooze = (id: string) => {
-    setReminders((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, daysRemaining: r.daysRemaining + 7 } : r
-      )
-    );
-    toast.success("Reminder snoozed for 7 days");
-  };
+  useEffect(() => {
+    fetchRemindersAndPets();
+  }, []);
 
-  const handleDelete = (id: string) => {
-    setReminders((prev) => prev.filter((r) => r.id !== id));
-    toast.success("Reminder removed");
-  };
-
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !dueDate) {
-      toast.error("Please enter a reminder title and due date");
+      toast.error("Please provide title and due date");
       return;
     }
 
-    const newReminder: PetReminder = {
-      id: `rem-${Date.now()}`,
-      petName,
-      petSpecies: petName === "Luna" ? "Cat" : "Dog",
-      title,
-      category,
-      dueDate,
-      daysRemaining: 14,
-      isCompleted: false,
-      notes: notes || undefined,
-    };
+    try {
+      setSaving(true);
+      const payload: Record<string, any> = {
+        title: title.trim(),
+        dueDate,
+        dueTime: dueTime || "09:00",
+        notes: notes.trim() || undefined,
+      };
+      if (selectedPetId) {
+        payload.petId = selectedPetId;
+      }
 
-    setReminders([newReminder, ...reminders]);
-    toast.success(`Reminder set for ${petName}`);
-    setIsModalOpen(false);
-    setTitle("");
-    setDueDate("");
-    setNotes("");
+      await apiClient.post("/reminders", payload);
+      toast.success("Reminder added to schedule!");
+      setIsModalOpen(false);
+      setTitle("");
+      setNotes("");
+      fetchRemindersAndPets();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create reminder");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleDone = async (id: string, currentlyDone: boolean) => {
+    try {
+      if (!currentlyDone) {
+        await apiClient.patch(`/reminders/${id}/done`, {});
+        toast.success("Reminder marked as completed!");
+      } else {
+        await apiClient.patch(`/reminders/${id}/reopen`, {});
+        toast.info("Reminder reopened.");
+      }
+      fetchRemindersAndPets();
+    } catch (err: any) {
+      // optimistic toggle
+      setReminders((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, isCompleted: !currentlyDone } : r))
+      );
+      toast.info("Reminder updated.");
+    }
+  };
+
+  const handleDeleteReminder = async (id: string) => {
+    if (confirm("Delete this reminder?")) {
+      try {
+        await apiClient.delete(`/reminders/${id}`);
+        toast.info("Reminder removed");
+        fetchRemindersAndPets();
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || "Failed to delete");
+      }
+    }
+  };
+
+  const handleSeedReminders = async () => {
+    try {
+      setSeeding(true);
+      const petId = pets[0]?.id;
+      await apiClient.post("/reminders", {
+        title: "Rabies Multi-booster Vaccination",
+        dueDate: "2026-12-15",
+        dueTime: "10:30",
+        notes: "Mandatory annual booster at Central Pet Hospital.",
+        petId: petId || undefined,
+      });
+
+      await apiClient.post("/reminders", {
+        title: "Broad-spectrum deworming tablet",
+        dueDate: "2026-12-22",
+        dueTime: "09:00",
+        notes: "Administer 1 tablet with morning meal.",
+        petId: petId || undefined,
+      });
+
+      toast.success("Seeded reminders into your database!");
+      fetchRemindersAndPets();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to seed reminders");
+    } finally {
+      setSeeding(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 sm:space-y-6">
+      {/* Top Banner (Liquid Glass) */}
+      <div className="rounded-[13px] border border-white/80 bg-white/55 p-6 sm:p-7 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_30px_rgba(1,95,160,0.10),inset_0_1px_0_rgba(255,255,255,0.95)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-sky-500/15 text-[#0D8BE0] text-[12px] font-semibold mb-2.5 border border-white/80 shadow-xs">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Preventative care calendar</span>
+          </div>
           <h1 className="font-display text-2xl sm:text-[28px] font-bold tracking-tight text-[#06395F]">
-            Care reminders & schedules
+            Booster &amp; health reminders
           </h1>
-          <p className="text-[13px] text-[#06395F]/75 mt-0.5 font-normal">
-            Keep track of upcoming rabies boosters, deworming cycles, and medication for your pets.
+          <p className="text-[13px] sm:text-sm text-[#06395F]/80 mt-1 max-w-xl font-normal leading-relaxed">
+            Automated notifications for vaccines, flea &amp; tick doses, deworming cycles and upcoming checkups.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-[13px] font-semibold shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add reminder</span>
-        </button>
-      </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={fetchRemindersAndPets}
+            disabled={loading}
+            className="p-2.5 rounded-[11px] bg-white border border-[#06395F]/15 text-[#06395F] hover:bg-slate-50 transition shadow-2xs"
+            title="Refresh reminders"
+          >
+            <RotateCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
 
-      {/* Filter Chips */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-[13px] bg-white/85 border border-[#06395F]/10 shadow-[0_1px_2px_rgba(6,57,95,0.06)]">
-        {/* Pet Filter */}
-        <div className="flex items-center gap-1 p-1 rounded-[11px] bg-slate-100 border border-slate-200 text-xs font-semibold text-[#06395F]">
-          {["ALL", "Milo", "Luna"].map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPetFilter(p)}
-              className={`px-3 py-1 rounded-[9px] transition ${
-                petFilter === p
-                  ? "bg-white text-[#0D8BE0] shadow-xs"
-                  : "text-[#06395F]/70 hover:text-[#06395F]"
-              }`}
-            >
-              {p === "ALL" ? "All pets" : p}
-            </button>
-          ))}
-        </div>
-
-        {/* Category Filter */}
-        <div className="flex items-center gap-1 p-1 rounded-[11px] bg-slate-100 border border-slate-200 text-xs font-semibold text-[#06395F]">
-          {["ALL", "Vaccination", "Deworming", "Medication"].map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCategoryFilter(c)}
-              className={`px-3 py-1 rounded-[9px] transition ${
-                categoryFilter === c
-                  ? "bg-white text-[#0D8BE0] shadow-xs"
-                  : "text-[#06395F]/70 hover:text-[#06395F]"
-              }`}
-            >
-              {c === "ALL" ? "All types" : c}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(13,150,230,0.30)] hover:-translate-y-0.5 active:translate-y-0 transition shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create reminder</span>
+          </button>
         </div>
       </div>
+
+      {/* Loading Skeleton */}
+      {loading && reminders.length === 0 && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-5 space-y-3 animate-pulse shadow-xs"
+            >
+              <div className="h-5 bg-slate-200 rounded w-1/3" />
+              <div className="h-4 bg-slate-200 rounded w-1/2" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && reminders.length === 0 && (
+        <div className="rounded-[13px] bg-white/85 border border-[#06395F]/10 p-10 sm:p-14 text-center space-y-4 shadow-[0_1px_2px_rgba(6,57,95,0.06)]">
+          <div className="w-14 h-14 mx-auto rounded-[13px] bg-sky-50 text-[#0D8BE0] flex items-center justify-center border border-sky-100">
+            <Bell className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="font-display text-lg font-bold text-[#06395F]">
+              All pet booster schedules up to date
+            </h3>
+            <p className="text-[13px] text-[#06395F]/75 leading-relaxed font-normal">
+              You have no pending medication or vaccination reminders right now. Add a custom reminder or seed a sample schedule.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] px-5 py-2.5 text-[13px] font-semibold text-white shadow-xs hover:-translate-y-0.5 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add reminder</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSeedReminders}
+              disabled={seeding}
+              className="inline-flex items-center gap-2 rounded-[11px] bg-sky-50 text-[#0D8BE0] border border-sky-200 px-4 py-2.5 text-[13px] font-semibold hover:bg-sky-100 transition cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>{seeding ? "Saving to database..." : "Seed sample reminders"}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Reminders List */}
-      <div className="space-y-3">
-        {filtered.map((r) => (
-          <div
-            key={r.id}
-            className={`rounded-[13px] border p-4 sm:p-5 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-              r.isCompleted
-                ? "bg-slate-50/70 border-slate-200 opacity-65"
-                : "bg-white/85 border-[#06395F]/10 shadow-[0_1px_2px_rgba(6,57,95,0.06)] hover:border-[#0D8BE0]/30"
-            }`}
-          >
-            <div className="flex items-start gap-3.5">
-              <button
-                type="button"
-                onClick={() => handleToggleComplete(r.id)}
-                className={`w-7 h-7 rounded-[8px] border flex items-center justify-center shrink-0 mt-0.5 transition ${
-                  r.isCompleted
-                    ? "bg-emerald-500 border-emerald-500 text-white"
-                    : "border-[#06395F]/20 bg-white hover:border-[#0D8BE0]"
-                }`}
-              >
-                {r.isCompleted && <CheckCircle2 className="w-4 h-4" />}
-              </button>
-
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-[6px] bg-sky-50 text-[#0D8BE0] border border-sky-100 text-[10px] font-bold">
-                    {r.category}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#06395F]">
-                    {r.petSpecies === "Dog" ? (
-                      <Dog className="w-3.5 h-3.5 text-amber-600" />
-                    ) : (
-                      <Cat className="w-3.5 h-3.5 text-indigo-600" />
-                    )}
-                    {r.petName}
-                  </span>
-                  <span className="text-[11px] text-[#06395F]/60">• Due {r.dueDate}</span>
-                </div>
-
-                <h3
-                  className={`font-bold text-sm text-[#06395F] ${
-                    r.isCompleted ? "line-through text-[#06395F]/50" : ""
+      {!loading && reminders.length > 0 && (
+        <div className="space-y-3">
+          {reminders.map((r) => (
+            <div
+              key={r.id}
+              className={`rounded-[13px] bg-white/85 border border-[#06395F]/10 p-4 sm:p-5 shadow-[0_1px_2px_rgba(6,57,95,0.06)] hover:border-[#0D8BE0]/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                r.isCompleted ? "opacity-60 bg-white/50" : ""
+              }`}
+            >
+              <div className="flex items-start gap-3.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => handleToggleDone(r.id, r.isCompleted)}
+                  className={`w-7 h-7 rounded-[8px] border flex items-center justify-center shrink-0 mt-0.5 transition ${
+                    r.isCompleted
+                      ? "bg-emerald-500 border-emerald-600 text-white"
+                      : "border-[#06395F]/20 hover:border-[#0D8BE0]"
                   }`}
+                  title={r.isCompleted ? "Reopen reminder" : "Mark as done"}
                 >
-                  {r.title}
-                </h3>
+                  {r.isCompleted && <CheckCircle2 className="w-4 h-4" />}
+                </button>
 
-                {r.notes && (
-                  <p className="text-xs text-[#06395F]/75 font-normal leading-relaxed">
-                    {r.notes}
-                  </p>
-                )}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3
+                      className={`font-display text-[15px] font-bold text-[#06395F] truncate ${
+                        r.isCompleted ? "line-through text-[#06395F]/50" : ""
+                      }`}
+                    >
+                      {r.title}
+                    </h3>
+                    <StatusBadge
+                      status={r.isCompleted ? "COMPLETED" : "PENDING"}
+                      label={r.isCompleted ? "Done" : "Due"}
+                    />
+                  </div>
 
-                {r.clinicRecommendation && (
-                  <p className="text-[10px] text-emerald-700 bg-emerald-50/70 px-2 py-1 rounded-[6px] border border-emerald-200 inline-block">
-                    {r.clinicRecommendation}
-                  </p>
-                )}
+                  <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#06395F]/75 mt-0.5">
+                    <span className="font-medium text-[#0D8BE0]">For {r.petName}</span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-[#06395F]/50" />
+                      <span>{r.dueDate}</span>
+                    </span>
+                    {r.dueTime && (
+                      <>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-[#06395F]/50" />
+                          <span>{r.dueTime}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {r.notes && (
+                    <p className="text-[12px] text-[#06395F]/70 mt-1 line-clamp-1">
+                      {r.notes}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteReminder(r.id)}
+                  className="p-1.5 rounded-[8px] text-[#06395F]/40 hover:text-rose-600 hover:bg-rose-50 transition"
+                  title="Delete reminder"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-
-            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
-              {!r.isCompleted ? (
-                <>
-                  <span
-                    className={`px-2.5 py-1 rounded-[8px] text-[11px] font-semibold ${
-                      r.daysRemaining <= 5
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-sky-50 text-sky-800"
-                    }`}
-                  >
-                    Due in {r.daysRemaining} days
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSnooze(r.id)}
-                    className="px-2.5 py-1.5 rounded-[9px] border border-[#06395F]/15 bg-white text-xs font-semibold text-[#06395F] hover:bg-slate-50 transition"
-                  >
-                    Snooze 7d
-                  </button>
-                </>
-              ) : (
-                <StatusBadge variant="success" text="Completed" />
-              )}
-
-              <button
-                type="button"
-                onClick={() => handleDelete(r.id)}
-                className="w-8 h-8 rounded-[9px] border border-[#06395F]/15 bg-white text-rose-500 hover:bg-rose-50 flex items-center justify-center transition"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Reminder Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-[13px] border border-white/80 bg-white/95 p-6 shadow-2xl backdrop-blur-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#06395F]/10">
-              <h2 className="font-bold text-base text-[#06395F]">Add pet reminder</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-[13px] border border-white/80 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#06395F]/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-[8px] bg-sky-500/15 text-[#0D8BE0] flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <h3 className="font-display text-base font-bold text-[#06395F]">
+                  Add pet health reminder
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500"
+                className="p-1.5 rounded-[8px] hover:bg-slate-100 text-[#06395F]/60"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-3.5 text-xs text-[#06395F]">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold">Select companion pet</label>
-                  <select
-                    value={petName}
-                    onChange={(e) => setPetName(e.target.value)}
-                    className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 bg-white text-xs text-[#06395F]"
-                  >
-                    <option value="Milo">Milo (Golden Retriever)</option>
-                    <option value="Luna">Luna (Persian Cat)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold">Reminder category</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 bg-white text-xs text-[#06395F]"
-                  >
-                    <option value="Vaccination">Vaccination booster</option>
-                    <option value="Deworming">Deworming tablet</option>
-                    <option value="Medication">Medication / drops</option>
-                    <option value="Grooming">Grooming & bath</option>
-                    <option value="Clinic visit">Clinic checkup</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold">Reminder title</label>
+            <form onSubmit={handleCreateReminder} className="space-y-3.5 text-[13px]">
+              <div>
+                <label className="block font-semibold text-[#06395F] mb-1">
+                  Reminder title *
+                </label>
                 <input
                   type="text"
+                  required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. DHPPi 7-in-1 Booster"
-                  className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                  placeholder="e.g. Annual Rabies Booster, Heartworm pill"
+                  className="w-full px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold">Due date</label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full h-10 px-3 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
-                />
+              {pets.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-[#06395F] mb-1">
+                    Select companion pet
+                  </label>
+                  <select
+                    value={selectedPetId}
+                    onChange={(e) => setSelectedPetId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-[11px] border border-[#06395F]/15 bg-white text-[#06395F]"
+                  >
+                    {pets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-[#06395F] mb-1">
+                    Due date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-[#06395F] mb-1">
+                    Time
+                  </label>
+                  <input
+                    type="time"
+                    value={dueTime}
+                    onChange={(e) => setDueTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold">Notes / dosage instructions (optional)</label>
+              <div>
+                <label className="block font-semibold text-[#06395F] mb-1">
+                  Doctor notes / instructions
+                </label>
                 <textarea
+                  rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Give 1 tablet after food in the morning..."
-                  rows={2}
-                  className="w-full p-2.5 rounded-[11px] border border-[#06395F]/20 text-xs text-[#06395F] focus:outline-none focus:ring-2 focus:ring-[#0D8BE0]"
+                  placeholder="e.g. Give 1 tablet with meal; monitor for fever."
+                  className="w-full px-3.5 py-2 rounded-[11px] border border-[#06395F]/15 focus:outline-none focus:border-[#0D8BE0] text-[#06395F]"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-[#06395F]/10">
+              <div className="pt-3 border-t border-[#06395F]/10 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-[11px] border border-[#06395F]/15 bg-white text-xs font-semibold text-[#06395F]"
+                  className="px-4 py-2 rounded-[11px] border border-[#06395F]/15 text-[#06395F] font-semibold hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white text-xs font-semibold shadow-xs hover:-translate-y-0.5 transition"
+                  disabled={saving}
+                  className="px-5 py-2 rounded-[11px] bg-gradient-to-b from-[#2FB0FF] to-[#0D8BE0] text-white font-semibold shadow-xs"
                 >
-                  Set reminder
+                  {saving ? "Saving..." : "Save reminder"}
                 </button>
               </div>
             </form>

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ChevronRight, Star } from "lucide-react";
+import InteractiveCat from "./InteractiveCat";
 
 /**
  * Hero v3
@@ -112,17 +113,12 @@ export default function HeroSection() {
         />
 
         {/* Cat: fixed height per breakpoint, bottom anchored, centred */}
-        <div className="hero-peek pointer-events-none absolute bottom-0 left-1/2 z-10 h-[17rem] select-none sm:h-[25rem] lg:h-[30rem]">
-          <Image
-            src="/images/Persian_Cat.png"
-            alt="Fluffy Persian cat looking at the camera"
-            width={480}
-            height={600}
-            priority
-            sizes="(min-width: 1024px) 384px, (min-width: 640px) 320px, 220px"
-            className="h-full w-auto object-contain object-bottom drop-shadow-[0_28px_40px_rgba(1,95,160,0.30)]"
-          />
-        </div>
+        
+
+{/* Cat */}
+<div className="hero-peek pointer-events-none absolute bottom-0 left-1/2 z-10 h-[17rem] select-none sm:h-[25rem] lg:h-[30rem]">
+  <InteractiveCat />
+</div>
 
        
       </div>

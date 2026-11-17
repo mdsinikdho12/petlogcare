@@ -135,6 +135,9 @@ function LoginForm() {
         document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${maxAge}; SameSite=Lax`;
         document.cookie = `refreshToken=true; path=/; max-age=${maxAge}; SameSite=Lax`;
         document.cookie = `petcarelog_session=true; path=/; max-age=${maxAge}; SameSite=Lax`;
+        if (user?.role) {
+          document.cookie = `userRole=${encodeURIComponent(user.role)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+        }
       }
 
       setAuth(user, accessToken);
