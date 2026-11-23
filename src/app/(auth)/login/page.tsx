@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, Check } from "lucide-react";
 import { loginSchema, type LoginFormData } from "@/lib/validations/auth";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/authStore";
@@ -94,11 +94,18 @@ function LoginForm() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
+
+  const handleQuickFill = (email: string, pass: string) => {
+    setValue("email", email, { shouldValidate: true });
+    setValue("password", pass, { shouldValidate: true });
+    toast.success("Demo credentials loaded into form");
+  };
 
   const onSubmit = async (values: LoginFormData) => {
     try {
@@ -156,16 +163,25 @@ function LoginForm() {
       // Full navigation ensures middleware receives the fresh cookies
       window.location.href = targetPath;
     } catch (err: any) {
-      const message =
-        err.response?.data?.message ||
-        "Invalid email or password. Please try again.";
+      let message = err.response?.data?.message;
+      if (!message) {
+        if (!err.response) {
+          message = "Cannot connect to server. Please check your internet or retry.";
+        } else if (err.response.status === 401) {
+          message = "Invalid email or password. Please check your credentials.";
+        } else if (err.response.status === 403) {
+          message = "Please verify your email address before logging in.";
+        } else {
+          message = "Sign in failed. Please try again later.";
+        }
+      }
       toast.error("Sign in failed", { description: message });
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+    const backendUrl = "https://petcarelog-api.lokmansarkar.com/api/v1";
     window.location.href = `${backendUrl}/auth/google`;
   };
 
@@ -187,6 +203,27 @@ function LoginForm() {
           <p className="mt-2 text-sm leading-relaxed text-[#0B4C7A]/75">
             Sign in to your pet health dashboard.
           </p>
+        </div>
+
+        {/* Demo Account Quick-Fill Helper */}
+        <div className="mb-5 p-3 rounded-2xl border border-sky-200/80 bg-sky-50/70 text-left">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#06395F] mb-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#0D8BE0]" />
+            <span>Quick Demo Login (Live Database):</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleQuickFill("ilovems336@gmail.com", "Mishti@2026")}
+            className="w-full text-left p-2 rounded-xl bg-white border border-sky-100 hover:border-sky-300 text-xs text-[#06395F] flex items-center justify-between group transition"
+          >
+            <div>
+              <span className="font-semibold block text-[#0D8BE0]">Pet Owner Account</span>
+              <span className="text-[11px] text-[#0B4C7A]/70">ilovems336@gmail.com</span>
+            </div>
+            <span className="text-[10px] font-bold text-[#0D8BE0] bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200 group-hover:bg-[#0D8BE0] group-hover:text-white transition">
+              Click to Fill
+            </span>
+          </button>
         </div>
 
         {/* Google */}

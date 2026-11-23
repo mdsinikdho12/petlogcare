@@ -1,8 +1,24 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/lib/store/authStore";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://petcarelog-api.lokmansarkar.com/api/v1";
+// In browser environments (Vercel, custom domain, localhost), using relative "/api/v1"
+// routes through the Next.js server-side API proxy (src/app/api/v1/[...path]/route.ts).
+// This eliminates CORS blocks, sets the required Nginx Host header, and ensures
+// flawless connectivity in production without requiring custom Vercel env configs.
+export const getApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    // If NEXT_PUBLIC_API_URL is explicitly set to a custom relative proxy, honor it
+    if (process.env.NEXT_PUBLIC_API_URL?.startsWith("/")) {
+      return process.env.NEXT_PUBLIC_API_URL;
+    }
+    // Otherwise in the browser, always use the same-origin reverse proxy /api/v1
+    return "/api/v1";
+  }
+  // Server-side / SSR / SSG direct access
+  return process.env.NEXT_PUBLIC_API_URL || "https://petcarelog-api.lokmansarkar.com/api/v1";
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -77,8 +93,9 @@ apiClient.interceptors.response.use(
 
       try {
         // Attempt rotation via cookie
+        const baseUrl = getApiBaseUrl();
         const { data } = await axios.post(
-          `${API_BASE_URL}/auth/refresh-token`,
+          `${baseUrl}/auth/refresh-token`,
           {},
           { withCredentials: true }
         );
